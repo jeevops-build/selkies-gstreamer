@@ -18,7 +18,7 @@ cp src/lib/*.js "${INSTALL_DIR}/lib/"
 mkdir -p "${INSTALL_DIR}/css"
 cp -R src/css/* "${INSTALL_DIR}/css/"
 
-cp src/*.js src/*.html src/manifest.json src/*.png src/*.ico "${INSTALL_DIR}/"
+cp src/*.js src/*.html src/manifest.json src/*.png "${INSTALL_DIR}/"
 
 ###
 # Patch index.html to fetch latest version of javascript source

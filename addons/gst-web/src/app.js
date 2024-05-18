@@ -288,7 +288,7 @@ var app = new Vue({
             }, 700);
         },
         appName(newValue) {
-            document.title = "Jeevops - " + newValue;
+            document.title = "Jeevops";
         },
         showDrawer(newValue) {
             // Detach inputs when menu is shown.
@@ -301,7 +301,7 @@ var app = new Vue({
     },
 
     updated: () => {
-        document.title = "Jeevops - " + app.appName;
+        document.title = "Jeevops";
     },
 
 });
