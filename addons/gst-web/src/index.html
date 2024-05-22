@@ -259,7 +259,7 @@
                     <template v-slot:activator="{ on }">
                       <v-icon class="ml-2" color="black" v-on="on">account_circle</v-icon>
                     </template>
-                    <span>Logged in as {{ getUsername() }} </span>
+                    <!-- <span>Logged in as {{ getUsername() }} </span> -->
                   </v-tooltip>
                 </v-toolbar>
               </p>
@@ -306,19 +306,19 @@
               </ul>
               </p>
               <hr />
-              <v-textarea bottom class="scrolly" label="Status Logs" readonly :value="logEntries.join('\n\n')">
+              <!-- <v-textarea bottom class="scrolly" label="Status Logs" readonly :value="logEntries.join('\n\n')">
               </v-textarea>
               <v-textarea bottom class="scrolly" label="Debug Logs" readonly :value="debugEntries.join('\n\n')">
-              </v-textarea>
+              </v-textarea> -->
               <p>
                 <v-switch v-model="resizeRemote" :label="`Resize remote to fit window: ${resizeRemote.toString()}`"></v-switch>
                 <v-switch v-model="scaleLocal" :label="`Scale to fit window: ${scaleLocal.toString()}`"></v-switch>
               </p>
-              <p>
+              <!-- <p>
                 Debugging
                 <v-switch v-model="debug" :label="`Debug logs: ${debug.toString()}`"></v-switch>
                 <v-switch v-model="turnSwitch" :label="`Force relay connection: ${turnSwitch.toString()}`"></v-switch>
-              </p>
+              </p> -->
 
               <p v-if="publishingAllowed">
                 Publishing
