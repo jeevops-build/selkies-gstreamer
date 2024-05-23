@@ -123,13 +123,14 @@
       word-wrap: normal;
       direction: ltr;
     }
+    body { background-color: #000000; }
   </style>
   <title>Selkies - webrtc</title>
 </head>
 
 <body>
-  <div id="app">
-    <v-app>
+  <div id="app" v-cloak>
+    <v-app dark>
       <v-navigation-drawer v-model="showDrawer" app fixed right temporary width="600">
         <v-container fluid grid-list-lg>
           <v-layout row wrap>
@@ -232,14 +233,14 @@
                     <span>Enable clipboard access</span>
                   </v-tooltip>
 
-                  <v-tooltip bottom>
+                  <!-- <v-tooltip bottom>
                     <template v-slot:activator="{ on }">
                       <v-btn icon href="/">
                         <v-icon color="black" v-on="on">home</v-icon>
                       </v-btn>
                     </template>
                     <span>Return to launcher</span>
-                  </v-tooltip>
+                  </v-tooltip> -->
 
                   <v-tooltip bottom v-if="gamepadState === 'connected'">
                     <template v-slot:activator="{ on }">
@@ -255,12 +256,12 @@
                     <span>Gamepad disconnected</span>
                   </v-tooltip>
 
-                  <v-tooltip bottom>
+                  <!-- <v-tooltip bottom>
                     <template v-slot:activator="{ on }">
                       <v-icon class="ml-2" color="black" v-on="on">account_circle</v-icon>
                     </template>
-                    <!-- <span>Logged in as {{ getUsername() }} </span> -->
-                  </v-tooltip>
+                    <span>Logged in as {{ getUsername() }} </span>
+                  </v-tooltip> -->
                 </v-toolbar>
               </p>
               <p>
@@ -377,7 +378,7 @@
           <div class="loading-text">Connection failed.</div>
         </div>
         <div v-else>
-          <scale-loader size="200px" :loading="(status !== 'connected')" color="#E0E0E0"></scale-loader>
+          <scale-loader indeterminate size="200px" :loading="(status !== 'connected')" color="#E0E0E0"></scale-loader>
           <div v-if="(status !== 'connected')" class="loading-text">{{ loadingText }}</div>
           <v-btn v-if="(status === 'connected' && showStart)" v-on:click="playStream()" color="#E0E0E0">
             start</v-btn>
@@ -385,6 +386,9 @@
       </div>
     </v-app>
   </div>
+  <style>
+    [v-cloak] { display: none; }
+  </style>
 </body>
 
 <script type="text/javascript">

@@ -174,7 +174,8 @@ var app = new Vue({
                     }
                     return true;
                 },
-            }
+            },
+            dark: true
         }
     },
 
