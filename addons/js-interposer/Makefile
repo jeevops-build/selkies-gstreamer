@@ -1,11 +1,10 @@
-PREFIX ?= /usr/local
-PKG_NAME ?= selkies-js-interposer
+PREFIX ?= /usr
 
 all:
-	gcc -shared -fPIC -o joystick_interposer.so joystick_interposer.c -ldl
+	gcc -shared -fPIC -o selkies_joystick_interposer.so joystick_interposer.c -ldl
 
 install: all
-	mkdir -p $(PREFIX)/lib/$(PKG_NAME)
-	cp *.so $(PREFIX)/lib/$(PKG_NAME)/
+	mkdir -p $(PREFIX)/lib/$(gcc -print-multiarch | sed -e 's/i.*86/i386/')
+	cp *.so $(PREFIX)/lib/$(gcc -print-multiarch | sed -e 's/i.*86/i386/')/
 clean:
 	rm -f *.so

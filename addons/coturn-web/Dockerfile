@@ -19,14 +19,13 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-FROM golang:1.17-alpine as build
+FROM golang:1.22-alpine AS build
 WORKDIR /go/src/coturn-web
-COPY go.mod go.sum ./
-RUN go mod download
 COPY *.go ./
+RUN go mod init selkies.io/coturn-web && go get -u -d ./... && go mod tidy
 RUN go build
 
-FROM alpine:3.9
+FROM alpine
 
 # Install tools
 RUN apk add -u bash jq bind-tools curl
@@ -34,7 +33,7 @@ RUN apk add -u bash jq bind-tools curl
 # Copy build from previous layer
 COPY --from=build /go/src/coturn-web/coturn-web /usr/local/bin/coturn-web
 
-COPY entrypoint.sh /
-RUN chmod +x /entrypoint.sh
+COPY entrypoint.sh /etc/
+RUN chmod +x /etc/entrypoint.sh
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/etc/entrypoint.sh"]

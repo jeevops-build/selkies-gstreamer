@@ -25,11 +25,15 @@ import http.client
 import json
 import logging
 import os
+import signal
 import socket
 import sys
 import time
 import urllib.parse
 import traceback
+
+logger = logging.getLogger("main")
+logger.setLevel(logging.INFO)
 
 from watchdog.observers import Observer
 from watchdog.events import FileClosedEvent, FileSystemEventHandler
@@ -41,9 +45,6 @@ from system_monitor import SystemMonitor
 from metrics import Metrics
 from resize import resize_display, get_new_res, set_dpi, set_cursor_size
 from signalling_web import WebRTCSimpleServer, generate_rtc_config
-
-logger = logging.getLogger("main")
-logger.setLevel(logging.INFO)
 
 DEFAULT_RTC_CONFIG = """{
   "lifetimeDuration": "86400s",
@@ -71,49 +72,53 @@ class HMACRTCMonitor:
 
         self.running = False
 
-        self.on_rtc_config = lambda stun_servers, turn_servers, rtc_config: logger.warning(
-            "unhandled on_rtc_config")
+        self.on_rtc_config = lambda stun_servers, turn_servers, rtc_config: logger.warning("unhandled on_rtc_config")
 
     def start(self):
-        self.running = True
-        while self.running:
-            if self.enabled and int(time.time()) % self.period == 0:
-                try:
-                    data = generate_rtc_config(self.turn_host, self.turn_port, self.turn_shared_secret, self.turn_username, self.turn_protocol, self.turn_tls)
-                    stun_servers, turn_servers, rtc_config = parse_rtc_config(data)
-                    self.on_rtc_config(stun_servers, turn_servers, rtc_config)
-                except Exception as e:
-                    logger.warning("could not fetch coturn config in periodic monitor: {}".format(e))
-            time.sleep(0.5)
-        logger.info("HMAC RTC monitor stopped")
+        if self.enabled:
+            self.running = True
+            while self.running:
+                if self.enabled and int(time.time()) % self.period == 0:
+                    try:
+                        hmac_data = generate_rtc_config(self.turn_host, self.turn_port, self.turn_shared_secret, self.turn_username, self.turn_protocol, self.turn_tls)
+                        stun_servers, turn_servers, rtc_config = parse_rtc_config(hmac_data)
+                        self.on_rtc_config(stun_servers, turn_servers, rtc_config)
+                    except Exception as e:
+                        logger.warning("could not fetch TURN HMAC config in periodic monitor: {}".format(e))
+                time.sleep(0.5)
+            logger.info("HMAC RTC monitor stopped")
 
     def stop(self):
         self.running = False
 
-class CoturnRTCMonitor:
-    def __init__(self, coturn_web_uri, coturn_web_username, coturn_auth_header_name, period=60, enabled=True):
+class RESTRTCMonitor:
+    def __init__(self, turn_rest_uri, turn_rest_username, turn_rest_username_auth_header, turn_protocol='udp', turn_rest_protocol_header='x-turn-protocol', turn_tls=False, turn_rest_tls_header='x-turn-tls', period=60, enabled=True):
         self.period = period
         self.enabled = enabled
         self.running = False
 
-        self.coturn_web_uri = coturn_web_uri
-        self.coturn_web_username = coturn_web_username
-        self.coturn_auth_header_name = coturn_auth_header_name
+        self.turn_rest_uri = turn_rest_uri
+        self.turn_rest_username = turn_rest_username.replace(":", "-")
+        self.turn_rest_username_auth_header = turn_rest_username_auth_header
+        self.turn_protocol = turn_protocol
+        self.turn_rest_protocol_header = turn_rest_protocol_header
+        self.turn_tls = turn_tls
+        self.turn_rest_tls_header = turn_rest_tls_header
 
-        self.on_rtc_config = lambda stun_servers, turn_servers, rtc_config: logger.warning(
-            "unhandled on_rtc_config")
+        self.on_rtc_config = lambda stun_servers, turn_servers, rtc_config: logger.warning("unhandled on_rtc_config")
 
     def start(self):
-        self.running = True
-        while self.running:
-            if self.enabled and int(time.time()) % self.period == 0:
-                try:
-                    stun_servers, turn_servers, rtc_config = fetch_coturn(self.coturn_web_uri, self.coturn_web_username, self.coturn_auth_header_name)
-                    self.on_rtc_config(stun_servers, turn_servers, rtc_config)
-                except Exception as e:
-                    logger.warning("could not fetch coturn config in periodic monitor: {}".format(e))
-            time.sleep(0.5)
-        logger.info("coturn RTC monitor stopped")
+        if self.enabled:
+            self.running = True
+            while self.running:
+                if self.enabled and int(time.time()) % self.period == 0:
+                    try:
+                        stun_servers, turn_servers, rtc_config = fetch_turn_rest(self.turn_rest_uri, self.turn_rest_username, self.turn_rest_username_auth_header, self.turn_protocol, self.turn_rest_protocol_header, self.turn_tls, self.turn_rest_tls_header)
+                        self.on_rtc_config(stun_servers, turn_servers, rtc_config)
+                    except Exception as e:
+                        logger.warning("could not fetch TURN REST config in periodic monitor: {}".format(e))
+                time.sleep(0.5)
+            logger.info("TURN REST RTC monitor stopped")
 
     def stop(self):
         self.running = False
@@ -124,8 +129,7 @@ class RTCConfigFileMonitor:
         self.running = False
         self.rtc_file = rtc_file
 
-        self.on_rtc_config = lambda stun_servers, turn_servers, rtc_config: logger.warning(
-            "unhandled on_rtc_config")
+        self.on_rtc_config = lambda stun_servers, turn_servers, rtc_config: logger.warning("unhandled on_rtc_config")
         
         self.observer = Observer()
         self.file_event_handler = FileSystemEventHandler()
@@ -159,8 +163,8 @@ def make_turn_rtc_config_json(host, port, username, password, protocol='udp', tl
   "iceServers": [
     {
       "urls": [
-        "stun:stun.l.google.com:19302",
-        "stun:%s:%s"
+        "stun:%s:%s",
+        "stun:stun.l.google.com:19302"
       ]
     },
     {
@@ -179,8 +183,8 @@ def parse_rtc_config(data):
     ice_servers = json.loads(data)['iceServers']
     stun_uris = []
     turn_uris = []
-    for server in ice_servers:
-        for url in server.get("urls", []):
+    for ice_server in ice_servers:
+        for url in ice_server.get("urls", []):
             if url.startswith("stun:"):
                 stun_host = url.split(":")[1]
                 stun_port = url.split(":")[2].split("?")[0]
@@ -192,8 +196,8 @@ def parse_rtc_config(data):
             elif url.startswith("turn:"):
                 turn_host = url.split(':')[1]
                 turn_port = url.split(':')[2].split('?')[0]
-                turn_user = server['username']
-                turn_password = server['credential']
+                turn_user = ice_server['username']
+                turn_password = ice_server['credential']
                 turn_uri = "turn://%s:%s@%s:%s" % (
                     urllib.parse.quote(turn_user, safe=""),
                     urllib.parse.quote(turn_password, safe=""),
@@ -204,8 +208,8 @@ def parse_rtc_config(data):
             elif url.startswith("turns:"):
                 turn_host = url.split(':')[1]
                 turn_port = url.split(':')[2].split('?')[0]
-                turn_user = server['username']
-                turn_password = server['credential']
+                turn_user = ice_server['username']
+                turn_password = ice_server['credential']
                 turn_uri = "turns://%s:%s@%s:%s" % (
                     urllib.parse.quote(turn_user, safe=""),
                     urllib.parse.quote(turn_password, safe=""),
@@ -215,12 +219,12 @@ def parse_rtc_config(data):
                 turn_uris.append(turn_uri)
     return stun_uris, turn_uris, data
 
-def fetch_coturn(uri, user, auth_header_name):
-    """Fetches TURN uri from a coturn web API
+def fetch_turn_rest(uri, user, auth_header_username='x-auth-user', protocol='udp', header_protocol='x-turn-protocol', turn_tls=False, header_tls='x-turn-tls'):
+    """Fetches TURN uri from a REST API
 
     Arguments:
-        uri {string} -- uri of coturn web service, example: http://localhost:8081/
-        user {string} -- username used to generate coturn credential, for example: <hostname>
+        uri {string} -- uri of REST API service, example: http://localhost:8081/
+        user {string} -- username used to generate TURN credential, for example: <hostname>
 
     Raises:
         Exception -- if response http status code is >= 400
@@ -237,31 +241,33 @@ def fetch_coturn(uri, user, auth_header_name):
     if parsed_uri.scheme == "https":
         conn = http.client.HTTPSConnection(parsed_uri.netloc)
     auth_headers = {
-        auth_header_name: user
+        auth_header_username: user,
+        header_protocol: protocol,
+        header_tls: 'true' if turn_tls else 'false'
     }
 
     conn.request("GET", parsed_uri.path, headers=auth_headers)
     resp = conn.getresponse()
     data = resp.read()
     if resp.status >= 400:
-        raise Exception("error fetching coturn web config. Status code: {}. {}, {}".format(resp.status, resp.reason, data))
+        raise Exception("error fetching REST API config. Status code: {}. {}, {}".format(resp.status, resp.reason, data))
     if not data:
-        raise Exception("data from coturn web service was empty")
+        raise Exception("data from REST API service was empty")
     return parse_rtc_config(data)
 
-def wait_for_app_ready(ready_file, app_auto_init = True):
+def wait_for_app_ready(ready_file, app_wait_ready = False):
     """Wait for streaming app ready signal.
 
-    returns when either app_auto_init is True OR the file at ready_file exists.
+    returns when either app_wait_ready is True OR the file at ready_file exists.
 
     Keyword Arguments:
-        app_auto_init {bool} -- skip wait for appready file (default: {True})
+        app_wait_ready {bool} -- skip wait for appready file (default: {True})
     """
 
     logger.info("Waiting for streaming app ready")
-    logging.debug("app_auto_init=%s, ready_file=%s" % (app_auto_init, ready_file))
+    logging.debug("app_wait_ready=%s, ready_file=%s" % (app_wait_ready, ready_file))
 
-    while not (app_auto_init or os.path.exists(ready_file)):
+    while app_wait_ready and not os.path.exists(ready_file):
         time.sleep(0.2)
 
 def set_json_app_argument(config_path, key, value):
@@ -293,133 +299,165 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--json_config',
                         default=os.environ.get(
-                            'JSON_CONFIG', '/tmp/selkies_config.json'),
-                        help='Path to the JSON file containing argument key-value pairs that are overlayed with CLI arguments or environment variables, this path must be writable.')
+                            'SELKIES_JSON_CONFIG', '/tmp/selkies_config.json'),
+                        help='Path to the JSON file containing argument key-value pairs that are overlayed with CLI arguments or environment variables, this path must be writable')
     parser.add_argument('--addr',
                         default=os.environ.get(
-                            'LISTEN_HOST', '0.0.0.0'),
-                        help='Host to listen on for the signaling and web server, default: "0.0.0.0"')
+                            'SELKIES_ADDR', '0.0.0.0'),
+                        help='Host to listen to for the signaling and web server, default: "0.0.0.0"')
     parser.add_argument('--port',
                         default=os.environ.get(
-                            'LISTEN_PORT', '8080'),
-                        help='Port to listen on for the signaling and web server, default: "8080"')
+                            'SELKIES_PORT', '8080'),
+                        help='Port to listen to for the signaling and web server, default: "8080"')
     parser.add_argument('--web_root',
                         default=os.environ.get(
-                            'WEB_ROOT', '/opt/gst-web'),
-                        help='Path to directory containing web app source, default: "/opt/gst-web"')
+                            'SELKIES_WEB_ROOT', '/opt/gst-web'),
+                        help='Path to directory containing web application files, default: "/opt/gst-web"')
     parser.add_argument('--enable_https',
                         default=os.environ.get(
-                            'ENABLE_HTTPS_WEB', 'false'),
-                        help='Enable or disable HTTPS for the web app, specifing a valid server certificate is recommended.')
+                            'SELKIES_ENABLE_HTTPS', 'false'),
+                        help='Enable or disable HTTPS for the web application, specifying a valid server certificate is recommended')
     parser.add_argument('--https_cert',
                         default=os.environ.get(
-                            'HTTPS_WEB_CERT', '/etc/ssl/certs/ssl-cert-snakeoil.pem'),
-                        help='Path to the TLS server certificate file when HTTPS is enabled.')
+                            'SELKIES_HTTPS_CERT', '/etc/ssl/certs/ssl-cert-snakeoil.pem'),
+                        help='Path to the TLS server certificate file when HTTPS is enabled')
     parser.add_argument('--https_key',
                         default=os.environ.get(
-                            'HTTPS_WEB_KEY', '/etc/ssl/private/ssl-cert-snakeoil.key'),
-                        help='Path to the TLS server private key file when HTTPS is enabled, set to an empty string if the private key is included in the certificate.')
+                            'SELKIES_HTTPS_KEY', '/etc/ssl/private/ssl-cert-snakeoil.key'),
+                        help='Path to the TLS server private key file when HTTPS is enabled, set to an empty value if the private key is included in the certificate')
     parser.add_argument('--enable_basic_auth',
                         default=os.environ.get(
-                            'ENABLE_BASIC_AUTH', 'true'),
-                        help='Enable basic authentication on server. Must set basic_auth_password and optionally basic_auth_user to enforce basic authentication.')
+                            'SELKIES_ENABLE_BASIC_AUTH', 'true'),
+                        help='Enable basic authentication on server, must set --basic_auth_password and optionally --basic_auth_user to enforce basic authentication')
     parser.add_argument('--basic_auth_user',
                         default=os.environ.get(
-                            'BASIC_AUTH_USER', os.environ.get('USER', '')),
-                        help='Username for basic authentication, default is to use the USER environment variable or a blank username if it does not exist. Must also set basic_auth_password to enforce basic authentication.')
+                            'SELKIES_BASIC_AUTH_USER', os.environ.get('USER', '')),
+                        help='Username for basic authentication, default is to use the USER environment variable or a blank username if not present, must also set --basic_auth_password to enforce basic authentication')
     parser.add_argument('--basic_auth_password',
                         default=os.environ.get(
-                            'BASIC_AUTH_PASSWORD', 'password'),
-                        help='Password used when basic authentication is set.')
-    parser.add_argument('--coturn_web_uri',
+                            'SELKIES_BASIC_AUTH_PASSWORD', 'password'),
+                        help='Password used when basic authentication is set')
+    parser.add_argument('--turn_rest_uri',
                         default=os.environ.get(
-                            'COTURN_WEB_URI', ''),
-                        help='URI for coturn REST API service, example: http://localhost:8081')
-    parser.add_argument('--coturn_web_username',
+                            'SELKIES_TURN_REST_URI', ''),
+                        help='URI for TURN REST API service, example: http://localhost:8008')
+    parser.add_argument('--turn_rest_username',
                         default=os.environ.get(
-                            'COTURN_WEB_USERNAME', "selkies-{}".format(socket.gethostname())),
-                        help='URI for coturn REST API service, default is the system hostname')
-    parser.add_argument('--coturn_auth_header_name',
+                            'SELKIES_TURN_REST_USERNAME', "selkies-{}".format(socket.gethostname())),
+                        help='URI for TURN REST API service, default set to system hostname')
+    parser.add_argument('--turn_rest_username_auth_header',
                         default=os.environ.get(
-                            'COTURN_AUTH_HEADER_NAME', 'x-auth-user'),
-                        help='Header name to pass user to coturn web service')
+                            'SELKIES_TURN_REST_USERNAME_AUTH_HEADER', 'x-auth-user'),
+                        help='Header to pass user to TURN REST API service')
+    parser.add_argument('--turn_rest_protocol_header',
+                        default=os.environ.get(
+                            'SELKIES_TURN_REST_PROTOCOL_HEADER', 'x-turn-protocol'),
+                        help='Header to pass desired TURN protocol to TURN REST API service')
+    parser.add_argument('--turn_rest_tls_header',
+                        default=os.environ.get(
+                            'SELKIES_TURN_REST_TLS_HEADER', 'x-turn-tls'),
+                        help='Header to pass TURN (D)TLS usage to TURN REST API service')
     parser.add_argument('--rtc_config_json',
                         default=os.environ.get(
-                            'RTC_CONFIG_JSON', '/tmp/rtc.json'),
-                        help='JSON file with RTC config to use as alternative to coturn service, read periodically')
+                            'SELKIES_RTC_CONFIG_JSON', '/tmp/rtc.json'),
+                        help='JSON file with RTC config to use instead of other TURN services, checked periodically')
     parser.add_argument('--turn_host',
                         default=os.environ.get(
-                            'TURN_HOST', ''),
-                        help='TURN host when generating RTC config from shared secret or legacy credentials.')
+                            'SELKIES_TURN_HOST', 'staticauth.openrelay.metered.ca'),
+                        help='TURN host when generating RTC config from shared secret or using long-term credentials')
     parser.add_argument('--turn_port',
                         default=os.environ.get(
-                            'TURN_PORT', ''),
-                        help='TURN port when generating RTC config from shared secret or legacy credentials.')
+                            'SELKIES_TURN_PORT', '443'),
+                        help='TURN port when generating RTC config from shared secret or using long-term credentials')
     parser.add_argument('--turn_protocol',
                         default=os.environ.get(
-                            'TURN_PROTOCOL', 'udp'),
-                        help='TURN protocol for the client to use ("udp" or "tcp"), set to "tcp" without the quotes if "udp" is blocked on the network.')
+                            'SELKIES_TURN_PROTOCOL', 'udp'),
+                        help='TURN protocol for the client to use ("udp" or "tcp"), set to "tcp" without the quotes if "udp" is blocked on the network, "udp" is otherwise strongly recommended')
     parser.add_argument('--turn_tls',
                         default=os.environ.get(
-                            'TURN_TLS', 'false'),
-                        help='Enable or disable TURN over TLS (for the TCP protocol) or TURN over DTLS (for the UDP protocol), valid TURN server certificate required.')
+                            'SELKIES_TURN_TLS', 'false'),
+                        help='Enable or disable TURN over TLS (for the TCP protocol) or TURN over DTLS (for the UDP protocol), valid TURN server certificate required')
     parser.add_argument('--turn_shared_secret',
                         default=os.environ.get(
-                            'TURN_SHARED_SECRET', ''),
-                        help='Shared TURN secret used to generate HMAC credentials, also requires TURN_HOST and TURN_PORT.')
+                            'SELKIES_TURN_SHARED_SECRET', 'openrelayprojectsecret'),
+                        help='Shared TURN secret used to generate HMAC credentials, also requires --turn_host and --turn_port')
     parser.add_argument('--turn_username',
                         default=os.environ.get(
-                            'TURN_USERNAME', ''),
-                        help='Legacy non-HMAC TURN credential username, also requires TURN_HOST and TURN_PORT.')
+                            'SELKIES_TURN_USERNAME', ''),
+                        help='Legacy non-HMAC TURN credential username, also requires --turn_host and --turn_port')
     parser.add_argument('--turn_password',
                         default=os.environ.get(
-                            'TURN_PASSWORD', ''),
-                        help='Legacy non-HMAC TURN credential password, also requires TURN_HOST and TURN_PORT.')
-    parser.add_argument('--app_auto_init',
-                        default=os.environ.get('APP_AUTO_INIT', 'true'),
-                        help='If true, skips wait for APP_READY_FILE to exist before starting stream.')
+                            'SELKIES_TURN_PASSWORD', ''),
+                        help='Legacy non-HMAC TURN credential password, also requires --turn_host and --turn_port')
+    parser.add_argument('--app_wait_ready',
+                        default=os.environ.get('SELKIES_APP_WAIT_READY', 'false'),
+                        help='Waits for --app_ready_file to exist before starting stream if set to "true"')
     parser.add_argument('--app_ready_file',
-                        default=os.environ.get('APP_READY_FILE', '/var/run/appconfig/appready'),
+                        default=os.environ.get('SELKIES_APP_READY_FILE', '/tmp/selkies-appready'),
                         help='File set by sidecar used to indicate that app is initialized and ready')
     parser.add_argument('--uinput_mouse_socket',
-                        default=os.environ.get('UINPUT_MOUSE_SOCKET', ''),
-                        help='Path to the uinput mouse socket provided by the uinput-device-plugin, if not provided uinput is used directly.')
+                        default=os.environ.get('SELKIES_UINPUT_MOUSE_SOCKET', ''),
+                        help='Path to the uinput mouse socket, if not provided uinput is used directly')
     parser.add_argument('--js_socket_path',
                         default=os.environ.get('SELKIES_JS_SOCKET_PATH', '/tmp'),
-                        help='Directory to write the selkies joystick interposer communication sockets to, default: /tmp results in socket files: /tmp/selkies_js{0-3}.sock')
+                        help='Directory to write the Selkies Joystick Interposer communication sockets to, default: /tmp, results in socket files: /tmp/selkies_js{0-3}.sock')
     parser.add_argument('--encoder',
-                        default=os.environ.get('WEBRTC_ENCODER', 'x264enc'),
-                        help='GStreamer encoder plugin to use')
+                        default=os.environ.get('SELKIES_ENCODER', 'x264enc'),
+                        help='GStreamer video encoder to use')
+    parser.add_argument('--gpu_id',
+                        default=os.environ.get('SELKIES_GPU_ID', '0'),
+                        help='GPU ID for GStreamer hardware video encoders, will use enumerated GPU ID (0, 1, ..., n) for NVIDIA and /dev/dri/renderD{128 + n} for VA-API')
     parser.add_argument('--framerate',
-                        default=os.environ.get('WEBRTC_FRAMERATE', '30'),
-                        help='Framerate of the streaming pipeline')
+                        default=os.environ.get('SELKIES_FRAMERATE', '60'),
+                        help='Framerate of the streamed remote desktop')
     parser.add_argument('--video_bitrate',
-                        default=os.environ.get('WEBRTC_VIDEO_BITRATE', '2000'),
-                        help='Default video bitrate')
+                        default=os.environ.get('SELKIES_VIDEO_BITRATE', '8000'),
+                        help='Default video bitrate in kilobits per second')
+    parser.add_argument('--keyframe_distance',
+                        default=os.environ.get('SELKIES_KEYFRAME_DISTANCE', '-1'),
+                        help='Distance between video keyframes/GOP-frames in seconds, defaults to "-1" for infinite keyframe distance (ideal for low latency and preventing periodic blurs)')
+    parser.add_argument('--congestion_control',
+                        default=os.environ.get('SELKIES_CONGESTION_CONTROL', 'false'),
+                        help='Enable Google Congestion Control (GCC), suggested if network conditions fluctuate and when bandwidth is >= 2 mbps but may lead to lower quality and microstutter due to adaptive bitrate in some encoders')
+    parser.add_argument('--video_packetloss_percent',
+                        default=os.environ.get('SELKIES_VIDEO_PACKETLOSS_PERCENT', '0'),
+                        help='Expected packet loss percentage (%%) for ULP/RED Forward Error Correction (FEC) in video, use "0" to disable FEC, less effective because of other mechanisms including NACK/PLI, enabling not recommended if Google Congestion Control is enabled')
     parser.add_argument('--audio_bitrate',
-                        default=os.environ.get('WEBRTC_AUDIO_BITRATE', '64000'),
-                        help='Default audio bitrate')
+                        default=os.environ.get('SELKIES_AUDIO_BITRATE', '128000'),
+                        help='Default audio bitrate in bits per second')
     parser.add_argument('--audio_channels',
-                        default=os.environ.get('WEBRTC_AUDIO_CHANNELS', '2'),
+                        default=os.environ.get('SELKIES_AUDIO_CHANNELS', '2'),
                         help='Number of audio channels, defaults to stereo (2 channels)')
+    parser.add_argument('--audio_packetloss_percent',
+                        default=os.environ.get('SELKIES_AUDIO_PACKETLOSS_PERCENT', '0'),
+                        help='Expected packet loss percentage (%%) for ULP/RED Forward Error Correction (FEC) in audio, use "0" to disable FEC')
     parser.add_argument('--enable_clipboard',
-                        default=os.environ.get('ENABLE_CLIPBOARD', 'true'),
+                        default=os.environ.get('SELKIES_ENABLE_CLIPBOARD', 'true'),
                         help='Enable or disable the clipboard features, supported values: true, false, in, out')
     parser.add_argument('--enable_resize',
-                        default=os.environ.get('WEBRTC_ENABLE_RESIZE', 'false'),
+                        default=os.environ.get('SELKIES_ENABLE_RESIZE', 'false'),
                         help='Enable dynamic resizing to match browser size')
     parser.add_argument('--enable_cursors',
-                        default=os.environ.get('WEBRTC_ENABLE_CURSORS', 'true'),
+                        default=os.environ.get('SELKIES_ENABLE_CURSORS', 'true'),
                         help='Enable passing remote cursors to client')
     parser.add_argument('--debug_cursors',
-                        default=os.environ.get('WEBRTC_DEBUG_CURSORS', 'false'),
+                        default=os.environ.get('SELKIES_DEBUG_CURSORS', 'false'),
                         help='Enable cursor debug logging')
     parser.add_argument('--cursor_size',
-                        default=os.environ.get('WEBRTC_CURSOR_SIZE', os.environ.get('XCURSOR_SIZE', '-1')),
+                        default=os.environ.get('SELKIES_CURSOR_SIZE', os.environ.get('XCURSOR_SIZE', '-1')),
                         help='Cursor size in points for the local cursor, set instead XCURSOR_SIZE without of this argument to configure the cursor size for both the local and remote cursors')
-    parser.add_argument('--metrics_port',
-                        default=os.environ.get('WEBRTC_METRICS_PORT', '8000'),
-                        help='Port to start the metrics server on')
+    parser.add_argument('--enable_webrtc_statistics',
+                        default=os.environ.get('SELKIES_ENABLE_WEBRTC_STATISTICS', 'false'),
+                        help='Enable WebRTC Statistics CSV dumping to the directory --webrtc_statistics_dir with filenames selkies-stats-video-[timestamp].csv and selkies-stats-audio-[timestamp].csv')
+    parser.add_argument('--webrtc_statistics_dir',
+                        default=os.environ.get('SELKIES_WEBRTC_STATISTICS_DIR', '/tmp'),
+                        help='Directory to save WebRTC Statistics CSV from client with filenames selkies-stats-video-[timestamp].csv and selkies-stats-audio-[timestamp].csv')
+    parser.add_argument('--enable_metrics_http',
+                        default=os.environ.get('SELKIES_ENABLE_METRICS_HTTP', 'false'),
+                        help='Enable the Prometheus HTTP metrics port')
+    parser.add_argument('--metrics_http_port',
+                        default=os.environ.get('SELKIES_METRICS_HTTP_PORT', '8000'),
+                        help='Port to start the Prometheus metrics server on')
     parser.add_argument('--debug', action='store_true',
                         help='Enable debug logging')
     args = parser.parse_args()
@@ -431,17 +469,17 @@ def main():
             json_args = json.load(open(args.json_config))
             for k, v in json_args.items():
                 if k == "framerate":
-                    args.framerate = int(v)
+                    args.framerate = str(int(v))
                 if k == "video_bitrate":
-                    args.video_bitrate = int(v)
+                    args.video_bitrate = str(int(v))
                 if k == "audio_bitrate":
-                    args.audio_bitrate = int(v)
+                    args.audio_bitrate = str(int(v))
                 if k == "enable_resize":
                     args.enable_resize = str((str(v).lower() == 'true')).lower()
                 if k == "encoder":
                     args.encoder = v.lower()
         except Exception as e:
-            logger.error("failed to load json config from %s: %s" % (args.json_config, str(e)))
+            logger.error("failed to load json config from {}: {}".format(args.json_config, str(e)))
 
     logging.warn(args)
 
@@ -452,7 +490,7 @@ def main():
         logging.basicConfig(level=logging.INFO)
 
     # Wait for streaming app to initialize
-    wait_for_app_ready(args.app_ready_file, args.app_auto_init.lower() == "true")
+    wait_for_app_ready(args.app_ready_file, args.app_wait_ready.lower() == "true")
 
     # Peer id for this app, default is 0, expecting remote peer id to be 1
     my_id = 0
@@ -460,8 +498,10 @@ def main():
     my_audio_id = 2
     audio_peer_id = 3
 
-    # Initialize metrics server.
-    metrics = Metrics(int(args.metrics_port))
+    # Initialize metrics server
+    using_metrics_http = args.enable_metrics_http.lower() == 'true'
+    using_webrtc_csv = args.enable_webrtc_statistics.lower() == 'true'
+    metrics = Metrics(int(args.metrics_http_port), using_webrtc_csv)
 
     # Initialize the signalling client
     using_https = args.enable_https.lower() == 'true'
@@ -473,14 +513,14 @@ def main():
         basic_auth_user=args.basic_auth_user,
         basic_auth_password=args.basic_auth_password)
 
-    # Initialize signalling client for audio connection.
+    # Initialize signalling client for audio connection
     audio_signalling = WebRTCSignalling('%s//127.0.0.1:%s/ws' % (ws_protocol, args.port), my_audio_id, audio_peer_id,
         enable_https=using_https,
         enable_basic_auth=using_basic_auth,
         basic_auth_user=args.basic_auth_user,
         basic_auth_password=args.basic_auth_password)
 
-    # Handle errors from the signalling server.
+    # Handle errors from the signalling server
     async def on_signalling_error(e):
        if isinstance(e, WebRTCSignallingErrorNoPeer):
            # Waiting for peer to connect, retry in 2 seconds.
@@ -503,64 +543,68 @@ def main():
     signalling.on_disconnect = lambda: app.stop_pipeline()
     audio_signalling.on_disconnect = lambda: audio_app.stop_pipeline()
 
-    # After connecting, attempt to setup call to peer.
+    # After connecting, attempt to setup call to peer
     signalling.on_connect = signalling.setup_call
     audio_signalling.on_connect = audio_signalling.setup_call
 
     # [START main_setup]
     # Fetch the TURN server and credentials
+    turn_rest_username = args.turn_rest_username.replace(":", "-")
     rtc_config = None
     turn_protocol = 'tcp' if args.turn_protocol.lower() == 'tcp' else 'udp'
     using_turn_tls = args.turn_tls.lower() == 'true'
-    using_coturn = False
+    using_turn_rest = False
     using_hmac_turn = False
     using_rtc_config_json = False
     if os.path.exists(args.rtc_config_json):
-        logger.warning("Using file for RTC config: %s", args.rtc_config_json)
+        logger.warning("Using JSON file from argument for RTC config")
         with open(args.rtc_config_json, 'r') as f:
             stun_servers, turn_servers, rtc_config = parse_rtc_config(f.read())
         using_rtc_config_json = True
     else:
-        if args.turn_shared_secret:
-            # Get HMAC credentials from built-in web server.
-            if not args.turn_host and args.turn_port:
-                logger.error("missing turn host and turn port")
-                sys.exit(1)
-            using_hmac_turn = True
-            data = generate_rtc_config(args.turn_host, args.turn_port, args.turn_shared_secret, args.coturn_web_username, turn_protocol, using_turn_tls)
-            stun_servers, turn_servers, rtc_config = parse_rtc_config(data)
-        elif args.turn_username and args.turn_password:
-            if not (args.turn_host and args.turn_port):
-                logger.error("missing turn host and turn port")
-                sys.exit(1)
-            logger.warning("using legacy non-HMAC TURN credentials.")
-            config_json = make_turn_rtc_config_json(args.turn_host, args.turn_port, args.turn_username, args.turn_password, turn_protocol, using_turn_tls)
-            stun_servers, turn_servers, rtc_config = parse_rtc_config(config_json)
-        else:
-            # Use existing coturn-web infrastructure.
+        if args.turn_rest_uri:
             try:
-                stun_servers, turn_servers, rtc_config = fetch_coturn(
-                    args.coturn_web_uri, args.coturn_web_username, args.coturn_auth_header_name)
-                using_coturn = True
+                stun_servers, turn_servers, rtc_config = fetch_turn_rest(
+                    args.turn_rest_uri, turn_rest_username, args.turn_rest_username_auth_header, turn_protocol, args.turn_rest_protocol_header, using_turn_tls, args.turn_rest_tls_header)
+                logger.info("using TURN REST API RTC configuration")
+                using_turn_rest = True
             except Exception as e:
-                logger.warning("error fetching coturn RTC config, using DEFAULT_RTC_CONFIG: {}".format(str(e)))
+                logger.warning("error fetching TURN REST API RTC configuration, falling back to other methods: {}".format(str(e)))
+                using_turn_rest = False
+        if not using_turn_rest:
+            if (args.turn_username and args.turn_password) and (args.turn_host and args.turn_port):
+                config_json = make_turn_rtc_config_json(args.turn_host, args.turn_port, args.turn_username, args.turn_password, turn_protocol, using_turn_tls)
+                stun_servers, turn_servers, rtc_config = parse_rtc_config(config_json)
+                logger.info("using TURN long-term username/password credentials")
+            elif args.turn_shared_secret and (args.turn_host and args.turn_port):
+                hmac_data = generate_rtc_config(args.turn_host, args.turn_port, args.turn_shared_secret, turn_rest_username, turn_protocol, using_turn_tls)
+                stun_servers, turn_servers, rtc_config = parse_rtc_config(hmac_data)
+                logger.info("using TURN short-term shared secret HMAC credentials")
+                using_hmac_turn = True
+            else:
                 stun_servers, turn_servers, rtc_config = parse_rtc_config(DEFAULT_RTC_CONFIG)
+                logger.warning("missing TURN server information, using DEFAULT_RTC_CONFIG")
 
-    logger.info("initial server RTC config: {}".format(rtc_config))
+    logger.info("initial server RTC configuration fetched")
 
     # Extract arguments
     enable_resize = args.enable_resize.lower() == "true"
     audio_channels = int(args.audio_channels)
     curr_fps = int(args.framerate)
+    gpu_id = int(args.gpu_id)
     curr_video_bitrate = int(args.video_bitrate)
     curr_audio_bitrate = int(args.audio_bitrate)
     enable_cursors = args.enable_cursors.lower() == "true"
     cursor_debug = args.debug_cursors.lower() == "true"
     cursor_size = int(args.cursor_size)
+    keyframe_distance = float(args.keyframe_distance)
+    congestion_control = args.congestion_control.lower() == "true"
+    video_packetloss_percent = float(args.video_packetloss_percent)
+    audio_packetloss_percent = float(args.audio_packetloss_percent)
 
     # Create instance of app
-    app = GSTWebRTCApp(stun_servers, turn_servers, audio_channels, curr_fps, args.encoder, curr_video_bitrate, curr_audio_bitrate)
-    audio_app = GSTWebRTCApp(stun_servers, turn_servers, audio_channels, curr_fps, args.encoder, curr_video_bitrate, curr_audio_bitrate)
+    app = GSTWebRTCApp(stun_servers, turn_servers, audio_channels, curr_fps, args.encoder, gpu_id, curr_video_bitrate, curr_audio_bitrate, keyframe_distance, congestion_control, video_packetloss_percent, audio_packetloss_percent)
+    audio_app = GSTWebRTCApp(stun_servers, turn_servers, audio_channels, curr_fps, args.encoder, gpu_id, curr_video_bitrate, curr_audio_bitrate, keyframe_distance, congestion_control, video_packetloss_percent, audio_packetloss_percent)
 
     # [END main_setup]
 
@@ -568,15 +612,15 @@ def main():
     app.on_sdp = signalling.send_sdp
     audio_app.on_sdp = audio_signalling.send_sdp
 
-    # Send ICE candidates to the signalling server.
+    # Send ICE candidates to the signalling server
     app.on_ice = signalling.send_ice
     audio_app.on_ice = audio_signalling.send_ice
 
-    # Set the remote SDP when received from signalling server.
+    # Set the remote SDP when received from signalling server
     signalling.on_sdp = app.set_sdp
     audio_signalling.on_sdp = audio_app.set_sdp
 
-    # Set ICE candidates received from signalling server.
+    # Set ICE candidates received from signalling server
     signalling.on_ice = app.set_ice
     audio_signalling.on_ice = audio_app.set_ice
 
@@ -590,6 +634,9 @@ def main():
                         on_resize_handler(meta["res"])
                     if meta["scale"]:
                         on_scaling_ratio_handler(meta["scale"])
+                else:
+                    logger.info("setting cursor to default size")
+                    set_cursor_size(16)
             logger.info("starting video pipeline")
             app.start_pipeline()
         elif str(session_peer_id) == str(audio_peer_id):
@@ -667,6 +714,8 @@ def main():
     # Initial binding of enable resize handler.
     if enable_resize:
         webrtc_input.on_resize = on_resize_handler
+    else:
+        webrtc_input.on_resize = lambda res: logger.warning("remote resize is disabled, skipping resize to %s" % res)
 
     # Handle for DPI events.
     def on_scaling_ratio_handler(scale):
@@ -686,6 +735,8 @@ def main():
     # Bind DPI handler.
     if enable_resize:
         webrtc_input.on_scaling_ratio = on_scaling_ratio_handler
+    else:
+        webrtc_input.on_scaling_ratio = lambda scale: logger.warning("remote resize is disabled, skipping DPI scale change to %s" % str(scale))
 
     webrtc_input.on_ping_response = lambda latency: app.send_latency_time(latency)
 
@@ -712,6 +763,9 @@ def main():
     # Send client latency to metrics
     webrtc_input.on_client_latency = lambda latency_ms: metrics.set_latency(latency_ms)
 
+    # Send WebRTC stats to metrics
+    webrtc_input.on_client_webrtc_stats = lambda webrtc_stat_type, webrtc_stats: metrics.set_webrtc_stats(webrtc_stat_type, webrtc_stats)
+
     # Initialize GPU monitor
     gpu_mon = GPUMonitor(enabled=args.encoder.startswith("nv"))
 
@@ -735,6 +789,9 @@ def main():
     # [START main_start]
     # Connect to the signalling server and process messages.
     loop = asyncio.get_event_loop()
+    # Handle SIGINT and SIGTERM where KeyboardInterrupt has issues with asyncio
+    loop.add_signal_handler(signal.SIGINT, lambda: sys.exit(1))
+    loop.add_signal_handler(signal.SIGTERM, lambda: sys.exit(1))
     webrtc_input.loop = loop
 
     # Initialize the signaling and web server
@@ -748,24 +805,30 @@ def main():
     options.https_cert = args.https_cert
     options.https_key = args.https_key
     options.health = "/health"
-    options.web_root = args.web_root
+    options.web_root = os.path.abspath(args.web_root)
     options.keepalive_timeout = 30
     options.cert_restart = False
     options.rtc_config_file = args.rtc_config_json
     options.rtc_config = rtc_config
-    options.turn_shared_secret = args.turn_shared_secret
-    options.turn_host = args.turn_host
-    options.turn_port = args.turn_port
+    options.turn_shared_secret = args.turn_shared_secret if using_hmac_turn else ''
+    options.turn_host = args.turn_host if using_hmac_turn else ''
+    options.turn_port = args.turn_port if using_hmac_turn else ''
     options.turn_protocol = turn_protocol
     options.turn_tls = using_turn_tls
-    options.turn_auth_header_name = args.coturn_auth_header_name
+    options.turn_auth_header_name = args.turn_rest_username_auth_header
     server = WebRTCSimpleServer(loop, options)
 
-    # Callback method to update turn servers of a running pipeline.
+    # Callback method to update TURN servers of a running pipeline.
     def mon_rtc_config(stun_servers, turn_servers, rtc_config):
-        for turn_server in turn_servers:
-            if app.webrtcbin:
-                app.webrtcbin.emit("add-turn-server", turn_server)
+        if app.webrtcbin:
+            logger.info("updating STUN server")
+            app.webrtcbin.set_property("stun-server", stun_servers[0])
+            for i, turn_server in enumerate(turn_servers):
+                logger.info("updating TURN server")
+                if i == 0:
+                    app.webrtcbin.set_property("turn-server", turn_server)
+                else:
+                    app.webrtcbin.emit("add-turn-server", turn_server)
         server.set_rtc_config(rtc_config)
 
     # Initialize periodic montior to refresh TURN RTC config when using shared secret.
@@ -773,19 +836,23 @@ def main():
         args.turn_host,
         args.turn_port,
         args.turn_shared_secret,
-        args.coturn_web_username,
+        turn_rest_username,
         turn_protocol=turn_protocol,
         turn_tls=using_turn_tls,
-        enabled=using_hmac_turn, period=60)
+        period=60, enabled=using_hmac_turn)
     hmac_turn_mon.on_rtc_config = mon_rtc_config
 
-    # Initialize coturn RTC config monitor to periodically refresh the coturn RTC config.
-    coturn_mon = CoturnRTCMonitor(
-        args.coturn_web_uri,
-        args.coturn_web_username,
-        args.coturn_auth_header_name,
-        enabled=using_coturn, period=60)
-    coturn_mon.on_rtc_config = mon_rtc_config
+    # Initialize REST API RTC config monitor to periodically refresh the REST API RTC config.
+    turn_rest_mon = RESTRTCMonitor(
+        args.turn_rest_uri,
+        turn_rest_username,
+        args.turn_rest_username_auth_header,
+        turn_protocol=turn_protocol,
+        turn_rest_protocol_header=args.turn_rest_protocol_header,
+        turn_tls=using_turn_tls,
+        turn_rest_tls_header=args.turn_rest_tls_header,
+        period=60, enabled=using_turn_rest)
+    turn_rest_mon.on_rtc_config = mon_rtc_config
 
     # Initialize file watcher for RTC config JSON file.
     rtc_file_mon = RTCConfigFileMonitor(
@@ -795,17 +862,20 @@ def main():
 
     try:
         asyncio.ensure_future(server.run(), loop=loop)
-        metrics.start()
+        if using_metrics_http:
+            metrics.start_http()
         loop.run_until_complete(webrtc_input.connect())
         loop.run_in_executor(None, lambda: webrtc_input.start_clipboard())
         loop.run_in_executor(None, lambda: webrtc_input.start_cursor_monitor())
-        loop.run_in_executor(None, lambda: gpu_mon.start())
+        loop.run_in_executor(None, lambda: gpu_mon.start(gpu_id))
         loop.run_in_executor(None, lambda: hmac_turn_mon.start())
-        loop.run_in_executor(None, lambda: coturn_mon.start())
+        loop.run_in_executor(None, lambda: turn_rest_mon.start())
         loop.run_in_executor(None, lambda: rtc_file_mon.start())
         loop.run_in_executor(None, lambda: system_mon.start())
 
         while True:
+            if using_webrtc_csv:
+                metrics.initialize_webrtc_csv_file(args.webrtc_statistics_dir)
             asyncio.ensure_future(app.handle_bus_calls(), loop=loop)
             asyncio.ensure_future(audio_app.handle_bus_calls(), loop=loop)
 
@@ -832,7 +902,7 @@ def main():
         webrtc_input.disconnect()
         gpu_mon.stop()
         hmac_turn_mon.stop()
-        coturn_mon.stop()
+        turn_rest_mon.stop()
         rtc_file_mon.stop()
         system_mon.stop()
         loop.run_until_complete(server.stop())

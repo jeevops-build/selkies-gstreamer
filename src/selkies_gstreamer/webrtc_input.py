@@ -30,7 +30,6 @@ import msgpack
 import re
 import os
 import subprocess
-from subprocess import Popen, PIPE, STDOUT
 import socket
 import struct
 import time
@@ -82,7 +81,7 @@ class WebRTCInputError(Exception):
 
 
 class WebRTCInput:
-    def __init__(self, uinput_mouse_socket_path="", js_socket_path="", enable_clipboard="", enable_cursors=True, cursor_size=24, cursor_scale=1.0, cursor_debug=False):
+    def __init__(self, uinput_mouse_socket_path="", js_socket_path="", enable_clipboard="", enable_cursors=True, cursor_size=16, cursor_scale=1.0, cursor_debug=False):
         """Initializes WebRTC input instance
         """
         self.loop = None
@@ -138,6 +137,8 @@ class WebRTCInput:
             'unhandled on_ping_response')
         self.on_cursor_change = lambda msg: logger.warn(
             'unhandled on_cursor_change')
+        self.on_client_webrtc_stats = lambda webrtc_stat_type, webrtc_stats: logger.warn(
+            'unhandled on_client_webrtc_stats')
 
     def __keyboard_connect(self):
         self.keyboard = pynput.keyboard.Controller()
@@ -323,18 +324,21 @@ class WebRTCInput:
             down {bool} -- toggle key down or up (default: {True})
         """
 
-        # With the Generic 105-key PC layout (default in Linux without a real keyboard), the key '<' is redirected to keycode 94
-        # Because keycode 94 with Shift pressed is instead the key '>', the keysym for '<' should instead be redirected to ','
-        # Although prevented in most cases, this fix may present issues in some keyboard layouts
-        if keysym == 60 and self.keyboard._display.keysym_to_keycode(keysym) == 94:
-            keysym = 44
-        keycode = pynput.keyboard.KeyCode(keysym)
-        if down:
-            self.keyboard.press(keycode)
-        else:
-            self.keyboard.release(keycode)
+        try:
+            # With the Generic 105-key PC layout (default in Linux without a real keyboard), the key '<' is redirected to keycode 94
+            # Because keycode 94 with Shift pressed is instead the key '>', the keysym for '<' should instead be redirected to ','
+            # Although prevented in most cases, this fix may present issues in some keyboard layouts
+            if keysym == 60 and self.keyboard._display.keysym_to_keycode(keysym) == 94:
+                keysym = 44
+            keycode = pynput.keyboard.KeyCode(keysym)
+            if down:
+                self.keyboard.press(keycode)
+            else:
+                self.keyboard.release(keycode)
+        except Exception as e:
+            logger.error('failed to send keypress: {}'.format(e))
 
-    def send_x11_mouse(self, x, y, button_mask, relative=False):
+    def send_x11_mouse(self, x, y, button_mask, scroll_magnitude, relative=False):
         """Sends mouse events to the X server.
 
         The mouse button mask is stored locally to keep track of press/release state.
@@ -344,6 +348,7 @@ class WebRTCInput:
         Arguments:
             x {integer} -- mouse position X
             y {integer} -- mouse position Y
+            scroll_magnitude {integer} -- 
             button_mask {integer} -- mask of 5 mouse buttons, button 1 is at the LSB.
         """
 
@@ -373,14 +378,21 @@ class WebRTCInput:
                         btn_num = MOUSE_BUTTON_MIDDLE
                     elif i == 2:
                         btn_num = MOUSE_BUTTON_RIGHT
-                    elif i == 3:
+                    elif i == 3 and button_mask != 0:
                         # Wheel up
                         action = MOUSE_SCROLL_UP
-                    elif i == 4:
+                    elif i == 4 and button_mask != 0:
                         # Wheel down
                         action = MOUSE_SCROLL_DOWN
 
                     data = (btn_action, btn_num)
+
+                    # if event is scroll up/down then send the event multiple times
+                    # based on the received scroll magnitue for smoother scroll experience
+                    if i == 3 or i == 4:
+                        for i in range(1, scroll_magnitude):
+                            self.send_mouse(action, data)
+
                     self.send_mouse(action, data)
 
             # Update the button mask to remember positions.
@@ -390,13 +402,19 @@ class WebRTCInput:
             self.xdisplay.sync()
 
     def read_clipboard(self):
-        return subprocess.getoutput("xclip -out")
+        try:
+            result = subprocess.run(('xsel', '--clipboard', '--output'), check=True, text=True, capture_output=True, timeout=3)
+            return result.stdout
+        except subprocess.SubprocessError as e:
+            logger.warning(f"Error while capturing clipboard: {e}")
 
     def write_clipboard(self, data):
-        cmd = ['xclip', '-selection', 'clipboard', '-in']
-        p = Popen(cmd, stdin=PIPE)
-        p.communicate(input=data.encode())
-        p.wait()
+        try:
+            subprocess.run(('xsel', '--clipboard', '--input'), input=data.encode(), check=True, timeout=3)
+            return True
+        except subprocess.SubprocessError as e:
+            logger.warning(f"Error while writing to clipboard: {e}")
+            return False
 
     def start_clipboard(self):
         if self.enable_clipboard in ["true", "out"]:
@@ -584,12 +602,12 @@ class WebRTCInput:
             if toks[0] == "m2":
                 relative = True
             try:
-                x, y, button_mask = [int(i) for i in toks[1:]]
+                x, y, button_mask, scroll_magnitude = [int(i) for i in toks[1:]]
             except:
-                x, y, button_mask = 0, 0, self.button_mask
+                x, y, button_mask, scroll_magnitude = 0, 0, self.button_mask, 0
                 relative = False
             try:
-                self.send_x11_mouse(x, y, button_mask, relative)
+                self.send_x11_mouse(x, y, button_mask, scroll_magnitude, relative)
             except Exception as e:
                 logger.warning('failed to set mouse cursor: {}'.format(e))
         elif toks[0] == "p":
@@ -648,7 +666,7 @@ class WebRTCInput:
         elif toks[0] == "cw":
             # Clipboard write
             if self.enable_clipboard in ["true", "in"]:
-                data = base64.b64decode(toks[1]).decode()
+                data = base64.b64decode(toks[1]).decode("utf-8")
                 self.write_clipboard(data)
                 logger.info("set clipboard content, length: %d" % len(data))
             else:
@@ -706,10 +724,16 @@ class WebRTCInput:
         elif toks[0] == "_l":
             # Reported latency from client.
             try:
-                latencty_ms = int(toks[1])
-                self.on_client_latency(latencty_ms)
+                latency_ms = int(toks[1])
+                self.on_client_latency(latency_ms)
             except:
                 logger.error(
                     "failed to parse latency report from client" + str(toks))
+        elif toks[0] == "_stats_video" or toks[0] == "_stats_audio":
+            # WebRTC Statistics API data from client
+            try:
+                self.on_client_webrtc_stats(toks[0], ",".join(toks[1:]))
+            except:
+                logger.error("failed to parse WebRTC Statistics JSON object")
         else:
             logger.info('unknown data channel message: %s' % msg)

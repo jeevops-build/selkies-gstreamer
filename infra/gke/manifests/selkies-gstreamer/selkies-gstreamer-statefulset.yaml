@@ -26,14 +26,14 @@ spec:
         # selkies-gstreamer selkies-gstreamer container
         ###
         - name: selkies-gstreamer
-          image: ghcr.io/selkies-project/selkies-gstreamer/gst-py-example:latest-ubuntu22.04
+          image: ghcr.io/selkies-project/selkies-gstreamer/gst-py-example:latest-ubuntu24.04
           imagePullPolicy: Always
           env:
-            - name: COTURN_WEB_URI
+            - name: SELKIES_TURN_REST_URI
               value: "http://coturn-web.coturn.svc.cluster.local:8080"
-            - name: COTURN_AUTH_HEADER_NAME
+            - name: SELKIES_TURN_REST_AUTHHEADER
               value: "x-goog-authenticated-user-email"
-            - name: COTURN_WEB_USERNAME
+            - name: SELKIES_TURN_REST_USERNAME
               value: "local:selkies-server"
           ports:
             - name: http-web

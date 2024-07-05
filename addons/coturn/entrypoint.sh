@@ -22,26 +22,29 @@
 #   limitations under the License.
 
 set -e
-set -x
 
 export EXTERNAL_IP="${EXTERNAL_IP:-$(detect_external_ip)}"
 
-# NOTE That that listening IP must be bound to only the IPs you will be responding to.
+# NOTE that the listening IP must be bound to only the IPs you will be responding to.
 # Binding to the wrong IP(s) can result in connectivity issues that are difficult to trace.
 # Typically $(hostname -i) will return the primary IP to listen on.
 
 turnserver \
     --verbose \
-    --no-tls \
-    --listening-ip=$(hostname -i) \
-    --listening-port=${TURN_PORT:-80} \
-    --aux-server="$(hostname -i):${TURN_ALT_PORT:-443}" \
-    --external-ip="${EXTERNAL_IP?missing env}" \
-    --realm=${TURN_REALM:-example.com} \
+    --listening-ip="0.0.0.0" \
+    --listening-ip="::" \
+    --listening-port="${TURN_PORT:-3478}" \
+    --aux-server="0.0.0.0:${TURN_ALT_PORT:-8443}" \
+    --aux-server="[::]:${TURN_ALT_PORT:-8443}" \
+    --realm="${TURN_REALM:-example.com}" \
+    --external-ip="${EXTERNAL_IP:-$(curl -fsSL checkip.amazonaws.com)}" \
+    --min-port="${TURN_MIN_PORT:-49152}" \
+    --max-port="${TURN_MAX_PORT:-65535}" \
+    --channel-lifetime="${TURN_CHANNEL_LIFETIME:--1}" \
     --use-auth-secret \
-    --static-auth-secret=${TURN_SHARED_SECRET:-changeme} \
-    --rest-api-separator="-" \
-    --channel-lifetime=${TURN_CHANNEL_LIFETIME:-"-1"} \
-    --min-port=${TURN_MIN_PORT:-49152} \
-    --max-port=${TURN_MAX_PORT:-65535} \
-    --prometheus ${EXTRA_ARGS}
+    --static-auth-secret="${TURN_SHARED_SECRET:-changeme}" \
+    --no-cli \
+    --cli-password="$(tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c 24)" \
+    --allow-loopback-peers \
+    --prometheus \
+    ${TURN_EXTRA_ARGS} $@

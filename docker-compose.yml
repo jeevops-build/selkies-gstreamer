@@ -19,19 +19,19 @@ services:
       dockerfile: Dockerfile
   test:
     ###
-    # NOTE: export the UBUNTU_RELEASE env var to change the base image during build and run.
+    # NOTE: export the DISTRIB_RELEASE env var to change the base image during build and run.
     ###
 
-    image: selkies-gstreamer-example:latest-ubuntu${UBUNTU_RELEASE:-22.04}
+    image: selkies-gstreamer-example:latest-ubuntu${DISTRIB_RELEASE:-24.04}
     entrypoint: ["/tini", "--", "/bin/bash"]
     build:
       context: .
       dockerfile: Dockerfile.example
       args:
-        UBUNTU_RELEASE: ${UBUNTU_RELEASE:-22.04}
+        DISTRIB_RELEASE: ${DISTRIB_RELEASE:-24.04}
 
         # Testing with gstreamer build in-repo:
-        # 1. (cd addons/gstreamer && docker build --build-arg UBUNTU_RELEASE=${UBUNTU_RELEASE?} -t gstreamer:latest-ubuntu${UBUNTU_RELEASE?} .)
+        # 1. (cd addons/gstreamer && docker build --build-arg DISTRIB_RELEASE=${DISTRIB_RELEASE?} -t gstreamer:latest-ubuntu${DISTRIB_RELEASE?} .)
         # 2. export GSTREAMER_BASE_IMAGE=gstreamer
         # 3. docker-compose build test
         GSTREAMER_BASE_IMAGE: ${GSTREAMER_BASE_IMAGE:-ghcr.io/selkies-project/selkies-gstreamer/gstreamer}
@@ -43,27 +43,27 @@ services:
         PACKAGE_VERSION: 0.0.0.dev0
     environment:
       # Basic authentication
-      ENABLE_BASIC_AUTH: ${ENABLE_BASIC_AUTH}
-      BASIC_AUTH_USER: ${BASIC_AUTH_USER}
-      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD}
+      SELKIES_ENABLE_BASIC_AUTH: ${SELKIES_ENABLE_BASIC_AUTH}
+      SELKIES_BASIC_AUTH_USER: ${SELKIES_BASIC_AUTH_USER}
+      SELKIES_BASIC_AUTH_PASSWORD: ${SELKIES_BASIC_AUTH_PASSWORD}
 
       # TURN with shared secret or user/pass
-      TURN_SHARED_SECRET: ${TURN_SHARED_SECRET}
-      TURN_HOST: ${TURN_HOST}
-      TURN_PORT: ${TURN_PORT}
-      TURN_USERNAME: ${TURN_USERNAME}
-      TURN_PASSWORD: ${TURN_PASSWORD}
+      SELKIES_TURN_SHARED_SECRET: ${SELKIES_TURN_SHARED_SECRET}
+      SELKIES_TURN_HOST: ${SELKIES_TURN_HOST}
+      SELKIES_TURN_PORT: ${SELKIES_TURN_PORT}
+      SELKIES_TURN_USERNAME: ${SELKIES_TURN_USERNAME}
+      SELKIES_TURN_PASSWORD: ${SELKIES_TURN_PASSWORD}
 
       # Turn with coTURN web
-      COTURN_WEB_URI: ${COTURN_WEB_URI}
-      COTURN_WEB_USERNAME: ${COTURN_WEB_USERNAME}
-      COTURN_AUTH_HEADER_NAME: ${COTURN_AUTH_HEADER_NAME}
+      SELKIES_TURN_REST_URI: ${SELKIES_TURN_REST_URI}
+      SELKIES_TURN_REST_USERNAME: ${SELKIES_TURN_REST_USERNAME}
+      SELKIES_TURN_REST_AUTHHEADER: ${SELKIES_TURN_REST_AUTHHEADER}
 
       # Additional server-side settings.
-      WEBRTC_ENABLE_RESIZE: ${WEBRTC_ENABLE_RESIZE}
+      SELKIES_ENABLE_RESIZE: ${SELKIES_ENABLE_RESIZE}
 
       # DEBUG remote cursors
-      WEBRTC_DEBUG_CURSORS: ${WEBRTC_DEBUG_CURSORS:-false}
+      SELKIES_DEBUG_CURSORS: ${SELKIES_DEBUG_CURSORS:-false}
 
       # Start full XFCE4 session, vs just X11 server.
       START_XFCE4: ${START_XFCE4:-true}
@@ -72,8 +72,8 @@ services:
     volumes:
       - type: bind
         source: ./src/selkies_gstreamer
-        # Change python3.8 to python3.10 in 22.04
-        target: /usr/local/lib/python3.8/dist-packages/selkies_gstreamer
+        # Change Python version to system version
+        target: /usr/local/lib/python3.12/dist-packages/selkies_gstreamer
         read_only: true
 
     # Configure for interactive session

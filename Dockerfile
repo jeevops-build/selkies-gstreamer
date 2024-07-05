@@ -4,10 +4,11 @@
 
 FROM python:3
 
-LABEL maintainer "https://github.com/danisla,https://github.com/ehfd"
+LABEL maintainer="https://github.com/danisla,https://github.com/ehfd"
 
 # Install build deps
-RUN python3 -m pip install --upgrade build
+ARG PIP_BREAK_SYSTEM_PACKAGES=1
+RUN python3 -m pip install --no-cache-dir --force-reinstall --upgrade build
 
 # Build a python package for the webrtc app.
 WORKDIR /opt/pypi
@@ -17,7 +18,7 @@ COPY src ./src
 COPY pyproject.toml setup.cfg ./
 
 ARG PYPI_PACKAGE=selkies-gstreamer
-ARG PACKAGE_VERSION=1.0.0
+ARG PACKAGE_VERSION=0.0.0.dev0
 
 # Patch the package name and version
 RUN sed -i \
