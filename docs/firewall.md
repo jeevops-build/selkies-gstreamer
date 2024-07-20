@@ -20,7 +20,7 @@ A configuration in your internet router called `Full Cone NAT` (otherwise called
 
 For an easy fix for containers, add the option `--network=host` to your Docker® command, or add `hostNetwork: true` under your Kubernetes YAML configuration file's pod `spec:` entry, which should be indented in the same depth as `containers:` (note that your cluster may have not allowed this, resulting in an error).
 
-**However, this only allows one container per host to work, because of UNIX socket restrictions. If you need multiple containers in one host, you should move on to the next section.**
+**You must also pass a new `DISPLAY` environment variable such as `-e DISPLAY=:22`, that is not used with any other X11 server or container in the same host, into the container.**
 
 This exposes your container to the host network, which disables container network isolation.
 
@@ -88,13 +88,13 @@ The Selkies-GStreamer [coTURN](component.md#coturn) image [`ghcr.io/selkies-proj
 
 It is possible to install [coTURN](https://github.com/coturn/coturn) on your own server or PC from a package repository, as long as the listening port and the relay ports may be opened.
 
-1. Installation for Ubuntu or Debian-based distributions (available in EPEL for CentOS/RHEL):
+**1. Installation for Ubuntu or Debian-based distributions (available in EPEL for CentOS/RHEL):**
 
 ```bash
 sudo apt-get update && sudo apt-get install --no-install-recommends -y coturn
 ```
 
-2. For self-hosted standalone coTURN servers, a minimal barebones configuration for `/etc/turnserver.conf` is available below, where options are also all available as command-line options (check the [coTURN Example Configuration](https://github.com/coturn/coturn/blob/master/examples/etc/turnserver.conf) for more information):
+**2. For self-hosted standalone coTURN servers, a minimal barebones configuration for `/etc/turnserver.conf` is available below**, where options are also all available as command-line options (check the [coTURN Example Configuration](https://github.com/coturn/coturn/blob/master/examples/etc/turnserver.conf) for more information)**:**
 
 ```conf
 listening-ip=0.0.0.0
@@ -147,7 +147,7 @@ It is strongly recommended to set the `min-port=` and `max-port=` parameters whi
 
 The `cert=` and `pkey=` options are required for using TURN over TLS/DTLS, but are otherwise optional. They should lead to the certificate and the private key from a legitimate certificate authority such as [ZeroSSL](https://zerossl.com/features/acme/) or [Let's Encrypt](https://letsencrypt.org/getting-started/) with a valid hostname which resolves to the TURN server.
 
-3. Enable the coTURN service:
+**3. Enable the coTURN service:**
 
 Modify the file `/etc/default/coturn`:
 
@@ -186,13 +186,13 @@ The [coTURN Container](/addons/coturn) is a reference container which provides t
 For time-limited shared secret TURN authentication:
 
 ```bash
-docker run --name coturn --rm -d -p 3478:3478 -p 3478:3478/udp -p 65500-65535:65500-65535 -p 65500-65535:65500-65535/udp coturn/coturn -n --listening-ip="0.0.0.0" --listening-ip="::" --realm=example.com --external-ip="$(curl -fsSL checkip.amazonaws.com)" --min-port=65500 --max-port=65535 --use-auth-secret --static-auth-secret=n0TaRealCoTURNAuthSecretThatIsSixtyFourLengthsLongPlaceholdPlace
+docker run --name coturn --rm -d -p 3478:3478 -p 3478:3478/udp -p 65500-65535:65500-65535 -p 65500-65535:65500-65535/udp coturn/coturn -n --listening-ip="0.0.0.0" --listening-ip="::" --realm=example.com --external-ip="$(curl -fsSL checkip.amazonaws.com 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1; exit}' || echo '127.0.0.1')" --min-port=65500 --max-port=65535 --use-auth-secret --static-auth-secret=n0TaRealCoTURNAuthSecretThatIsSixtyFourLengthsLongPlaceholdPlace
 ```
 
 For legacy long-term TURN authentication:
 
 ```bash
-docker run --name coturn --rm -d -p 3478:3478 -p 3478:3478/udp -p 65500-65535:65500-65535 -p 65500-65535:65500-65535/udp coturn/coturn -n --listening-ip="0.0.0.0" --listening-ip="::" --realm=example.com --external-ip="$(curl -fsSL checkip.amazonaws.com)" --min-port=65500 --max-port=65535 --lt-cred-mech --user=username1:password1
+docker run --name coturn --rm -d -p 3478:3478 -p 3478:3478/udp -p 65500-65535:65500-65535 -p 65500-65535:65500-65535/udp coturn/coturn -n --listening-ip="0.0.0.0" --listening-ip="::" --realm=example.com --external-ip="$(curl -fsSL checkip.amazonaws.com 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1; exit}' || echo '127.0.0.1')" --min-port=65500 --max-port=65535 --lt-cred-mech --user=username1:password1
 ```
 
 **The relay ports and the listening port must all be open to the internet.**

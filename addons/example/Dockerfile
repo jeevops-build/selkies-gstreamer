@@ -233,10 +233,12 @@ Pin-Priority: -1" > /etc/apt/preferences.d/firefox-nosnap && \
         firefox \
         pavucontrol \
         jstest-gtk \
+        dnsutils \
         coturn \
         # NGINX web server
         nginx \
-        apache2-utils && \
+        apache2-utils \
+        netcat-openbsd && \
     # Sanitize NGINX path
     sed -i -e 's/\/var\/log\/nginx\/access\.log/\/dev\/stdout/g' -e 's/\/var\/log\/nginx\/error\.log/\/dev\/stderr/g' -e 's/\/run\/nginx\.pid/\/tmp\/nginx\.pid/g' /etc/nginx/nginx.conf && \
     echo "error_log /dev/stderr;" >> /etc/nginx/nginx.conf && \
@@ -279,7 +281,7 @@ turnserver \
     --listening-ip=\"::\" \
     --listening-port=\"\${SELKIES_TURN_PORT:-3478}\" \
     --realm=\"\${TURN_REALM:-example.com}\" \
-    --external-ip=\"\${SELKIES_TURN_HOST:-\$(curl -fsSL checkip.amazonaws.com)}\" \
+    --external-ip=\"\${TURN_EXTERNAL_IP:-\$(dig TXT +short @ns1.google.com o-o.myaddr.l.google.com 2>/dev/null | { read output; if [ -z \"\$output\" ] || echo \"\$output\" | grep -q '^;;'; then exit 1; else echo \"\$(echo \$output | sed 's,\\\",,g')\"; fi } || dig -6 TXT +short @ns1.google.com o-o.myaddr.l.google.com 2>/dev/null | { read output; if [ -z \"\$output\" ] || echo \"\$output\" | grep -q '^;;'; then exit 1; else echo \"\$(echo \$output | sed 's,\\\",,g')\"; fi } || hostname -I 2>/dev/null | awk '{print \$1; exit}' || echo '127.0.0.1')}\" \
     --min-port=\"\${TURN_MIN_PORT:-49152}\" \
     --max-port=\"\${TURN_MAX_PORT:-65535}\" \
     --channel-lifetime=\"\${TURN_CHANNEL_LIFETIME:--1}\" \
@@ -327,6 +329,7 @@ ENV DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR:-/tmp}/dbus-session-${
 USER 1000
 ENV SHELL=/bin/bash
 ENV USER=ubuntu
+ENV HOME=/home/ubuntu
 WORKDIR /home/ubuntu
 
 EXPOSE 8080
