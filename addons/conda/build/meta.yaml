@@ -5,7 +5,6 @@
 {% set name = "selkies-gstreamer" %}
 {% set gstreamer_version = "1.24.5" %}
 {% set python = "3.12" %}
-{% set ffmpeg = ">=6.1" %}
 {% set posix = 'm2-' if win else '' %}
 
 package:
@@ -73,10 +72,8 @@ requirements:
     - gmp
     - gobject-introspection
     - gsl
-    - bzip2
     - cmake
     - libcap
-    - libiconv
     - libtool
     - libgcrypt
     - nasm
@@ -87,7 +84,6 @@ requirements:
     - tomli
     - perl
     - openssl
-    - zlib
     # Replace with host dependency libglvnd when merged
     # https://github.com/conda-forge/staged-recipes/pull/25919
     # https://github.com/conda-forge/cdt-builds/issues/66#issuecomment-1833417828
@@ -107,66 +103,22 @@ requirements:
   host:
     - python {{ python }}
     - pip
-    - ffmpeg {{ ffmpeg }}
-    - dav1d <1.3,>=1.0
     - abseil-cpp
-    - libass
-    - curl
-    - libcurl
     - libdrm
-    - libusb
-    - elfutils
-    - libunwind
-    - nettle
     - openssl
-    - glew
-    - glfw
-    - libiconv
-    - libxml2
+    - libzlib
     - glib
     - glib-networking
     - gnutls
-    - gdk-pixbuf
-    - librsvg
-    - imath
-    - cairo
-    - pango
     - pygobject
-    - popt
     - setuptools
-    - srt
-    - zlib
-    - libffi
-    - libsoup
-    - libvulkan-loader
-    - libvulkan-headers
-    - shaderc
-    - openexr
-    - openjpeg
-    - libjpeg-turbo
-    - libcap
-    - libxslt
-    - bzip2
-    - libde265
-    - libwebp
     - libvpx
     - openh264
     - x264
     - x265
     - aom
-    - rav1e
     - svt-av1
-    - srt
-    - lcms2
-    - libflac
-    - libogg
     - libopus
-    - libsndfile
-    - libtheora
-    - libvorbis
-    - mpg123
-    - lame
-    - libpng
     - libva                              # [linux]
     - libudev                            # [linux]
     - jack                               # [linux]
@@ -175,31 +127,14 @@ requirements:
     - alsa-lib                           # [linux]
     - mesalib                            # [linux]
     - libxcb                             # [linux]
-    - libxkbcommon                       # [linux]
-    - libxkbfile                         # [linux]
-    - xorg-libxcursor                    # [linux]
     - xorg-libxdamage                    # [linux]
-    - xorg-libxft                        # [linux]
-    - xorg-libxxf86vm                    # [linux]
-    - xorg-libxau                        # [linux]
-    - xorg-libxdmcp                      # [linux]
-    - xorg-libxcomposite                 # [linux]
     - xorg-libxfixes                     # [linux]
-    - xorg-font-util                     # [linux64]
-    - xorg-libxres                       # [linux64]
-    - xorg-libice                        # [linux]
     - xorg-libxext                       # [linux]
-    - xorg-libxmu                        # [linux]
     - xorg-libxrandr                     # [linux]
     - xorg-libxrender                    # [linux]
-    - xorg-libsm                         # [linux]
     - xorg-libxtst                       # [linux]
-    - xorg-libxt                         # [linux]
     - xorg-libxi                         # [linux]
-    - xorg-libxpm                        # [linux]
-    - xorg-libxinerama                   # [linux]
     - xorg-libx11                        # [linux]
-    - expat                              # [linux]
     - wayland-protocols                  # [linux]
     - wayland                            # [linux]
   run:
@@ -220,34 +155,15 @@ requirements:
     - pulseaudio                         # [linux]
     - pulseaudio-client                  # [linux]
     - libva-utils                        # [linux]
-    - libvulkan-loader
     - libxcb                             # [linux]
-    - libxkbcommon                       # [linux]
-    - libxkbfile                         # [linux]
-    - xorg-libxcursor                    # [linux]
-    - xorg-libxcvt                       # [linux]
     - xorg-libxdamage                    # [linux]
-    - xorg-libxft                        # [linux]
-    - xorg-libxxf86vm                    # [linux]
-    - xorg-libxau                        # [linux]
-    - xorg-libxdmcp                      # [linux]
-    - xorg-libxcomposite                 # [linux]
     - xorg-libxfixes                     # [linux]
-    - xorg-font-util                     # [linux64]
-    - xorg-libxres                       # [linux64]
-    - xorg-libice                        # [linux]
     - xorg-libxext                       # [linux]
-    - xorg-libxmu                        # [linux]
     - xorg-libxrandr                     # [linux]
     - xorg-libxrender                    # [linux]
-    - xorg-libsm                         # [linux]
     - xorg-libxtst                       # [linux]
-    - xorg-libxt                         # [linux]
     - xorg-libxi                         # [linux]
-    - xorg-libxpm                        # [linux]
-    - xorg-libxinerama                   # [linux]
     - xorg-libx11                        # [linux]
-    - expat                              # [linux]
     - wayland-protocols                  # [linux]
     - wayland                            # [linux]
     - bash                               # [linux]

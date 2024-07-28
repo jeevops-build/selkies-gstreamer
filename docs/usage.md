@@ -74,7 +74,7 @@ If the latency becomes higher while the screen is idle or the tab is not focused
 
 If it does not, disable all power saving or efficiency features available in the web browser. In Windows 10 or 11, try `Start > Settings > System > Power & battery > Power mode > Best performance`. Also, note that if you saturate your CPU or GPU with an application on the host, the remote desktop interface will also substantially slow down as it cannot use the CPU or GPU enough to decode the screen. Also, check for GPU driver/firmware updates in the client computer.
 
-However, it might be that the parameters for the WebRTC interface, video encoders, the RTSP payloader, or other [GStreamer](https://gstreamer.freedesktop.org) plugins are not optimized enough. If you find that it is the case, we always welcome [contributions](development.md). If your changes show noticeably better results in the same conditions, please make a [Pull Request](https://github.com/selkies-project/selkies-gstreamer/pulls), or tell us about the parameters in any channel that we can reach so that we could also test.
+However, it might be that the parameters for the WebRTC interface, video encoders, the RTP payloader, or other [GStreamer](https://gstreamer.freedesktop.org) plugins are not optimized enough. If you find that it is the case, we always welcome [contributions](development.md). If your changes show noticeably better results in the same conditions, please make a [Pull Request](https://github.com/selkies-project/selkies-gstreamer/pulls), or tell us about the parameters in any channel that we can reach so that we could also test.
 
 </details>
 
@@ -119,7 +119,7 @@ The below steps can be used when you want to test your TURN server configured wi
 **1. Run the [Example Container](component.md#example-container) (fill in `DISTRIB_RELEASE` to Ubuntu versions such as `24.04`):**
 
 ```bash
-docker run --pull=always --name selkies -it -d --rm -p 8080:8080 -p 3478:3478 ghcr.io/selkies-project/selkies-gstreamer/gst-py-example:main-ubuntu${DISTRIB_RELEASE}
+docker run --name selkies -it -d --rm -p 8080:8080 -p 3478:3478 ghcr.io/selkies-project/selkies-gstreamer/gst-py-example:main-ubuntu${DISTRIB_RELEASE}
 docker exec -it selkies bash
 ```
 

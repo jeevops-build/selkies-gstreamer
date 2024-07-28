@@ -18,7 +18,7 @@ touch /dev/input/js0 /dev/input/js1 /dev/input/js2 /dev/input/js3 || sudo-root t
 
 # Set default display
 export DISPLAY="${DISPLAY:-:20}"
-# PipeWire-Pulse server socket location
+# PipeWire-Pulse server socket path
 export PIPEWIRE_LATENCY="32/48000"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 export PIPEWIRE_RUNTIME_DIR="${PIPEWIRE_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/tmp}}"
@@ -35,7 +35,7 @@ echo 'Waiting for X Socket' && until [ -S "/tmp/.X11-unix/X${DISPLAY#*:}" ]; do 
 selkies-gstreamer-resize 1920x1080
 
 # Start Xfce4 Desktop session
-[ "${START_XFCE4:-true}" = "true" ] && rm -rf ~/.config/xfce4 && vglrun -d "${VGL_DISPLAY:-egl}" xfce4-session &
+[ "${START_XFCE4:-true}" = "true" ] && rm -rf ~/.config/xfce4 && vglrun -d "${VGL_DISPLAY:-egl}" /usr/bin/dbus-launch --exit-with-session /usr/bin/xfce4-session &
 
 echo "Session Running. Press [Return] to exit."
 read

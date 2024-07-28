@@ -27,6 +27,8 @@ RUN apt-get clean && apt-get update && apt-get dist-upgrade -y && apt-get instal
         apt-utils \
         dbus-user-session \
         fakeroot \
+        fuse \
+        kmod \
         locales \
         ssl-cert \
         sudo \
@@ -43,7 +45,10 @@ RUN apt-get clean && apt-get update && apt-get dist-upgrade -y && apt-get instal
     usermod -a -G adm,audio,cdrom,dialout,dip,fax,floppy,games,input,lp,plugdev,render,ssl-cert,sudo,tape,tty,video,voice ubuntu && \
     echo "ubuntu ALL=(ALL:ALL) NOPASSWD: ALL" >> /etc/sudoers && \
     echo "ubuntu:${PASSWD}" | chpasswd && \
-    chown -R -f --no-preserve-root ubuntu:ubuntu / || echo 'Failed to set filesystem ownership to ubuntu user'
+    chown -R -f -h --no-preserve-root ubuntu:ubuntu / || echo 'Failed to set filesystem ownership in some paths to ubuntu user' && \
+    # Preserve setuid/setgid removed by chown
+    chmod -f 4755 /usr/lib/dbus-1.0/dbus-daemon-launch-helper /usr/bin/chfn /usr/bin/chsh /usr/bin/mount /usr/bin/gpasswd /usr/bin/passwd /usr/bin/newgrp /usr/bin/umount /usr/bin/su /usr/bin/sudo-root /usr/bin/fusermount || echo 'Failed to set chmod setuid for some paths' && \
+    chmod -f 2755 /var/local /var/mail /usr/sbin/unix_chkpwd /usr/sbin/pam_extrausers_chkpwd /usr/bin/expiry /usr/bin/chage || echo 'Failed to set chmod setgid for some paths'
 
 # Set locales
 ENV LANG="en_US.UTF-8"
@@ -69,30 +74,17 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         python3-gi \
         python3-setuptools \
         python3-wheel \
-        libaa1 \
-        bzip2 \
         libgcrypt20 \
-        libcairo-gobject2 \
-        libpangocairo-1.0-0 \
-        libgdk-pixbuf2.0-0 \
-        libsoup2.4-1 \
-        libsoup-gnome2.4-1 \
         libgirepository-1.0-1 \
         glib-networking \
         libglib2.0-0 \
-        libjson-glib-1.0-0 \
         libgudev-1.0-0 \
         alsa-utils \
         jackd2 \
         libjack-jackd2-0 \
         libpulse0 \
-        libogg0 \
         libopus0 \
-        libvorbis-dev \
-        libjpeg-turbo8 \
-        libopenjp2-7 \
         libvpx-dev \
-        libwebp-dev \
         x264 \
         x265 \
         libdrm2 \
@@ -115,7 +107,6 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         xserver-xorg-core \
         libx11-xcb1 \
         libxcb-dri3-0 \
-        libxkbcommon0 \
         libxdamage1 \
         libxfixes3 \
         libxv1 \
@@ -131,8 +122,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         mesa-vulkan-drivers \
         vulkan-tools \
         radeontop && \
+    if [ "$(grep VERSION_ID= /etc/os-release | cut -d= -f2 | tr -d '\"')" \> "20.04" ]; then apt-get install --no-install-recommends -y xcvt libopenh264-dev svt-av1 aom-tools; else apt-get install --no-install-recommends -y mesa-utils-extra; fi && \
     if [ "$(dpkg --print-architecture)" = "amd64" ]; then apt-get install --no-install-recommends -y intel-gpu-tools nvtop va-driver-all i965-va-driver-shaders intel-media-va-driver-non-free; fi && \
-    if [ "$(grep VERSION_ID= /etc/os-release | cut -d= -f2 | tr -d '\"')" \> "20.04" ]; then apt-get install --no-install-recommends -y xcvt libopenh264-dev libde265-0 svt-av1 aom-tools; else apt-get install --no-install-recommends -y mesa-utils-extra; fi && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/debconf/* /var/log/* /tmp/* /var/tmp/* && \
     echo "/usr/local/nvidia/lib" >> /etc/ld.so.conf.d/nvidia.conf && \
     echo "/usr/local/nvidia/lib64" >> /etc/ld.so.conf.d/nvidia.conf && \
@@ -175,14 +166,14 @@ RUN cd /tmp && VIRTUALGL_VERSION="$(curl -fsSL "https://api.github.com/repos/Vir
     curl -fsSL -O "https://github.com/VirtualGL/virtualgl/releases/download/${VIRTUALGL_VERSION}/virtualgl32_${VIRTUALGL_VERSION}_amd64.deb" && \
     apt-get update && apt-get install -y --no-install-recommends "./virtualgl_${VIRTUALGL_VERSION}_amd64.deb" "./virtualgl32_${VIRTUALGL_VERSION}_amd64.deb" && \
     rm -f "virtualgl_${VIRTUALGL_VERSION}_amd64.deb" "virtualgl32_${VIRTUALGL_VERSION}_amd64.deb" && \
-    chmod u+s /usr/lib/libvglfaker.so /usr/lib/libvglfaker-nodl.so /usr/lib/libvglfaker-opencl.so /usr/lib/libdlfaker.so /usr/lib/libgefaker.so && \
-    chmod u+s /usr/lib32/libvglfaker.so /usr/lib32/libvglfaker-nodl.so /usr/lib32/libvglfaker-opencl.so /usr/lib32/libdlfaker.so /usr/lib32/libgefaker.so && \
-    chmod u+s /usr/lib/i386-linux-gnu/libvglfaker.so /usr/lib/i386-linux-gnu/libvglfaker-nodl.so /usr/lib/i386-linux-gnu/libvglfaker-opencl.so /usr/lib/i386-linux-gnu/libdlfaker.so /usr/lib/i386-linux-gnu/libgefaker.so; \
+    chmod -f u+s /usr/lib/libvglfaker.so /usr/lib/libvglfaker-nodl.so /usr/lib/libvglfaker-opencl.so /usr/lib/libdlfaker.so /usr/lib/libgefaker.so && \
+    chmod -f u+s /usr/lib32/libvglfaker.so /usr/lib32/libvglfaker-nodl.so /usr/lib32/libvglfaker-opencl.so /usr/lib32/libdlfaker.so /usr/lib32/libgefaker.so && \
+    chmod -f u+s /usr/lib/i386-linux-gnu/libvglfaker.so /usr/lib/i386-linux-gnu/libvglfaker-nodl.so /usr/lib/i386-linux-gnu/libvglfaker-opencl.so /usr/lib/i386-linux-gnu/libdlfaker.so /usr/lib/i386-linux-gnu/libgefaker.so; \
     elif [ "$(dpkg --print-architecture)" = "arm64" ]; then \
     curl -fsSL -O "https://github.com/VirtualGL/virtualgl/releases/download/${VIRTUALGL_VERSION}/virtualgl_${VIRTUALGL_VERSION}_arm64.deb" && \
     apt-get update && apt-get install -y --no-install-recommends ./virtualgl_${VIRTUALGL_VERSION}_arm64.deb && \
     rm -f "virtualgl_${VIRTUALGL_VERSION}_arm64.deb" && \
-    chmod u+s /usr/lib/libvglfaker.so /usr/lib/libvglfaker-nodl.so /usr/lib/libdlfaker.so /usr/lib/libgefaker.so; fi && \
+    chmod -f u+s /usr/lib/libvglfaker.so /usr/lib/libvglfaker-nodl.so /usr/lib/libdlfaker.so /usr/lib/libgefaker.so; fi && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/debconf/* /var/log/* /tmp/* /var/tmp/*
 
 WORKDIR /opt
@@ -204,15 +195,18 @@ Pin-Priority: -1" > /etc/apt/preferences.d/firefox-nosnap && \
         pipewire-jack \
         pipewire-locales \
         pipewire-v4l2 \
+        pipewire-vulkan \
         pipewire-libcamera \
+        gstreamer1.0-libcamera \
         gstreamer1.0-pipewire \
         libpipewire-0.3-modules \
         libpipewire-module-x11-bell \
+        libspa-0.2-bluetooth \
         libspa-0.2-jack \
         libspa-0.2-modules \
         wireplumber \
         wireplumber-locales \
-        gir1.2-wp-0.4 \
+        gir1.2-wp-0.5 \
         # Example packages
         git \
         tmux \
@@ -266,11 +260,11 @@ RUN pip3 install --no-cache-dir --force-reinstall /opt/${PYPI_PACKAGE}-${PACKAGE
 
 # Copy scripts and configurations used to start the container
 COPY --chown=1000:1000 entrypoint.sh /etc/entrypoint.sh
-RUN chmod 755 /etc/entrypoint.sh
+RUN chmod -f 755 /etc/entrypoint.sh
 COPY --chown=1000:1000 selkies-gstreamer-entrypoint.sh /etc/selkies-gstreamer-entrypoint.sh
-RUN chmod 755 /etc/selkies-gstreamer-entrypoint.sh
+RUN chmod -f 755 /etc/selkies-gstreamer-entrypoint.sh
 COPY --chown=1000:1000 supervisord.conf /etc/supervisord.conf
-RUN chmod 755 /etc/supervisord.conf
+RUN chmod -f 755 /etc/supervisord.conf
 
 # Configure coTURN script
 RUN echo "#!/bin/bash\n\
@@ -286,26 +280,19 @@ turnserver \
     --max-port=\"\${TURN_MAX_PORT:-65535}\" \
     --channel-lifetime=\"\${TURN_CHANNEL_LIFETIME:--1}\" \
     --lt-cred-mech \
-    --user \"selkies:\${TURN_RANDOM_PASSWORD}\" \
+    --user=\"selkies:\${TURN_RANDOM_PASSWORD:-\$(tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c 24)}\" \
     --no-cli \
     --cli-password=\"\${TURN_RANDOM_PASSWORD:-\$(tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c 24)}\" \
+    --db=\"\${XDG_RUNTIME_DIR:-/tmp}/coturn-turndb\" \
     --allow-loopback-peers \
     \${TURN_EXTRA_ARGS} \$@\
-" > /etc/start-turnserver.sh && chmod 755 /etc/start-turnserver.sh
+" > /etc/start-turnserver.sh && chmod -f 755 /etc/start-turnserver.sh
 
 # Configure bashrc to show /etc/motd and /etc/issue
 RUN echo "[ ! -z \"\$TERM\" -a -r /etc/motd ] && echo \"\$(grep PRETTY_NAME= /etc/os-release | cut -d= -f2 | tr -d '\\\"')\" && cat /etc/motd" >> /etc/bash.bashrc && \
     echo "==============================================\n\
 = Selkies-GStreamer Example Docker Container =\n\
 ==============================================\n\
-\n\
-To test the package:\n\
-\n\
-'/etc/entrypoint.sh' and '/etc/selkies-gstreamer-entrypoint.sh'\n\
-\n\
-To test the standalone signaling server:\n\
-\n\
-python3 signalling_web.py --port 8080 --web_root=/opt/gst-web &\
 " > /etc/motd
 
 SHELL ["/bin/sh", "-c"]
@@ -313,8 +300,8 @@ SHELL ["/bin/sh", "-c"]
 USER 0
 # Enable sudo through sudo-root with uid 0
 RUN if [ -d "/usr/libexec/sudo" ]; then SUDO_LIB="/usr/libexec/sudo"; else SUDO_LIB="/usr/lib/sudo"; fi && \
-    chown -R -f --no-preserve-root root:root /usr/bin/sudo-root /etc/sudo.conf /etc/sudoers /etc/sudoers.d /etc/sudo_logsrvd.conf "${SUDO_LIB}" || echo 'Failed to provide root permissions to sudo' && \
-    chmod -f 4755 /usr/bin/sudo-root || echo 'Failed to set chmod to sudo-root'
+    chown -R -f -h --no-preserve-root root:root /usr/bin/sudo-root /etc/sudo.conf /etc/sudoers /etc/sudoers.d /etc/sudo_logsrvd.conf "${SUDO_LIB}" || echo 'Failed to provide root permissions in some paths relevant to sudo' && \
+    chmod -f 4755 /usr/bin/sudo-root || echo 'Failed to set chmod setuid for root'
 USER 1000
 
 ENV PIPEWIRE_LATENCY="32/48000"
@@ -324,7 +311,7 @@ ENV PULSE_RUNTIME_PATH="${PULSE_RUNTIME_PATH:-${XDG_RUNTIME_DIR:-/tmp}/pulse}"
 ENV PULSE_SERVER="${PULSE_SERVER:-unix:${PULSE_RUNTIME_PATH:-${XDG_RUNTIME_DIR:-/tmp}/pulse}/native}"
 
 # dbus-daemon to the below address is required during startup
-ENV DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR:-/tmp}/dbus-session-${DISPLAY#*:}"
+ENV DBUS_SYSTEM_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR:-/tmp}/dbus-system-bus"
 
 USER 1000
 ENV SHELL=/bin/bash
