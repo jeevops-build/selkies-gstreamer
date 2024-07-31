@@ -1030,15 +1030,14 @@ class GSTWebRTCApp:
         pulsesrc_capsfilter = Gst.ElementFactory.make("capsfilter")
         pulsesrc_capsfilter.set_property("caps", pulsesrc_caps)
 
-        # Encode the raw pulseaudio stream to opus format which is the
-        # default packetized streaming format for the web.
+        # Encode the raw PulseAudio stream to the Opus format which is
+        # the default packetized streaming format for the web
         opusenc = Gst.ElementFactory.make("opusenc", "opusenc")
 
         # Low-latency and high-quality configurations
         opusenc.set_property("audio-type", "restricted-lowdelay")
         opusenc.set_property("bandwidth", "fullband")
         opusenc.set_property("bitrate-type", "cbr")
-        opusenc.set_property("dtx", True)
         # OPUS_FRAME: Modify all locations with "OPUS_FRAME:"
         # Browser-side SDP munging ("minptime=3"/"minptime=5") is required if frame-size < 10
         opusenc.set_property("frame-size", "10")
@@ -1056,7 +1055,6 @@ class GSTWebRTCApp:
         # RTP packets that are sent over the connection transport.
         rtpopuspay = Gst.ElementFactory.make("rtpopuspay")
         rtpopuspay.set_property("mtu", 1200)
-        rtpopuspay.set_property("dtx", True)
 
         # Add WebRTC RTP extensions
         extensions_return = self.rtp_add_extensions(rtpopuspay, audio=True)
@@ -1064,23 +1062,23 @@ class GSTWebRTCApp:
             logger.warning("WebRTC RTP extension configuration failed with audio, this may lead to suboptimal performance")
 
         # Insert a queue for the RTP packets.
-        # rtpopuspay_queue = Gst.ElementFactory.make("queue", "rtpopuspay_queue")
+        rtpopuspay_queue = Gst.ElementFactory.make("queue", "rtpopuspay_queue")
 
         # Make the queue leaky in the downstream direction, drop packets if the queue is behind.
-        # rtpopuspay_queue.set_property("leaky", "downstream")
+        rtpopuspay_queue.set_property("leaky", "downstream")
 
         # Discard all data in the queue when an EOS event is received
-        # rtpopuspay_queue.set_property("flush-on-eos", True)
+        rtpopuspay_queue.set_property("flush-on-eos", True)
 
         # Set the queue max time to 16ms (16000000ns)
         # If the pipeline is behind by more than 1s, the packets
         # will be dropped.
         # This helps buffer out latency in the audio source.
-        # rtpopuspay_queue.set_property("max-size-time", 16000000)
+        rtpopuspay_queue.set_property("max-size-time", 16000000)
 
         # Set the other queue sizes to 0 to make it only time-based.
-        # rtpopuspay_queue.set_property("max-size-buffers", 0)
-        # rtpopuspay_queue.set_property("max-size-bytes", 0)
+        rtpopuspay_queue.set_property("max-size-buffers", 0)
+        rtpopuspay_queue.set_property("max-size-bytes", 0)
 
         # Set the capabilities for the rtpopuspay element.
         rtpopuspay_caps = Gst.caps_from_string("application/x-rtp")
@@ -1103,7 +1101,7 @@ class GSTWebRTCApp:
         rtpopuspay_capsfilter.set_property("caps", rtpopuspay_caps)
 
         # Add all elements to the pipeline.
-        pipeline_elements = [pulsesrc, pulsesrc_capsfilter, opusenc, rtpopuspay, rtpopuspay_capsfilter]  # rtpopuspay_queue
+        pipeline_elements = [pulsesrc, pulsesrc_capsfilter, opusenc, rtpopuspay, rtpopuspay_queue, rtpopuspay_capsfilter]
 
         for pipeline_element in pipeline_elements:
             self.pipeline.add(pipeline_element)
@@ -1115,7 +1113,7 @@ class GSTWebRTCApp:
             if not Gst.Element.link(pipeline_elements[i], pipeline_elements[i + 1]):
                 raise GSTWebRTCAppError("Failed to link {} -> {}".format(pipeline_elements[i].get_name(), pipeline_elements[i + 1].get_name()))
 
-        # Enable redundancy (RED) in the audio stream, does not work currently
+        # Enable redundancy (RED) in the audio stream, does not currently work
         # transceiver = self.webrtcbin.emit("get-transceiver", 0)
         # transceiver.set_property("fec-type", GstWebRTC.WebRTCFECType.ULP_RED if self.audio_packetloss_percent > 0 else GstWebRTC.WebRTCFECType.NONE)
         # transceiver.set_property("fec-percentage", self.audio_packetloss_percent)
