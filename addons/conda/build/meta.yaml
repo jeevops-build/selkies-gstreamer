@@ -13,7 +13,6 @@ package:
 
 source:
   - url: https://gitlab.freedesktop.org/gstreamer/gstreamer/-/archive/{{ gstreamer_version }}/gstreamer-{{ gstreamer_version }}.tar.gz
-    folder: gstreamer
 
 about:
   home: https://github.com/selkies-project/selkies-gstreamer
@@ -24,6 +23,7 @@ about:
   dev_url: https://github.com/selkies-project/selkies-gstreamer
 
 build:
+  activate_in_script: true
   skip: true  # [not linux]
   script_env:
     - PYPI_PACKAGE
@@ -34,18 +34,6 @@ build:
 outputs:
   - name: "{{ name|lower }}"
     type: conda_v2
-    build:
-      run_exports:
-        - {{ pin_subpackage('selkies-gstreamer', max_pin='x.x') }}
-        - {{ pin_subpackage('python-xlib', allow_no_other_outputs=True) }}
-        - {{ pin_subpackage('gstreamer', allow_no_other_outputs=True) }}
-        - {{ pin_subpackage('gst-plugins-base', allow_no_other_outputs=True) }}
-        - {{ pin_subpackage('gst-plugins-good', allow_no_other_outputs=True) }}
-        - {{ pin_subpackage('gst-plugins-ugly', allow_no_other_outputs=True) }}
-        - {{ pin_subpackage('gst-plugins-bad', allow_no_other_outputs=True) }}
-        - {{ pin_subpackage('gst-libav', allow_no_other_outputs=True) }}
-        - {{ pin_subpackage('gst-python', allow_no_other_outputs=True) }}
-        - {{ pin_subpackage('gstreamer-orc', allow_no_other_outputs=True) }}
 
 requirements:
   build:
@@ -57,9 +45,6 @@ requirements:
     - cross-python_{{ target_platform }} {{ python }}  # [build_platform != target_platform]
     - cargo-c
     - pkg-config
-    - autoconf
-    - automake
-    - bash-completion
     - binutils
     - {{ posix }}bison
     - file
@@ -72,39 +57,22 @@ requirements:
     - gmp
     - gobject-introspection
     - gsl
-    - cmake
     - libcap
     - libtool
     - libgcrypt
     - nasm
-    - valgrind
     - yasm
     - meson
     - ninja
     - tomli
     - perl
     - openssl
-    # Replace with host dependency libglvnd when merged
-    # https://github.com/conda-forge/staged-recipes/pull/25919
-    # https://github.com/conda-forge/cdt-builds/issues/66#issuecomment-1833417828
-    - {{ cdt('mesa-libgl-devel') }}  # [linux]
-    - {{ cdt('mesa-libegl-devel') }}  # [linux]
-    - {{ cdt('mesa-libgbm') }}  # [linux]
-    - {{ cdt('libdrm-devel') }}  # [linux]
-    - {{ cdt('mesa-dri-drivers') }}  # [linux]
-    - {{ cdt('libglvnd-devel') }}  # [linux]
-    - {{ cdt('libglvnd-glx') }}  # [linux]
-    - {{ cdt('libglvnd-egl') }}  # [linux]
-    - {{ cdt('libglvnd-gles') }}  # [linux]
-    - {{ cdt('libglvnd-opengl') }}  # [linux]
-    - {{ cdt('libxshmfence-devel') }}  # [linux]
-    - {{ cdt('mesa-khr-devel') }}  # [linux]
-    - {{ cdt('libselinux-devel') }}  # [linux]
   host:
     - python {{ python }}
     - pip
     - abseil-cpp
     - libdrm
+    - libiconv
     - openssl
     - libzlib
     - glib
@@ -119,6 +87,11 @@ requirements:
     - aom
     - svt-av1
     - libopus
+    - libegl-devel                       # [linux]
+    - libgl-devel                        # [linux]
+    - libgles-devel                      # [linux]
+    - libglx-devel                       # [linux]
+    - libopengl-devel                    # [linux]
     - libva                              # [linux]
     - libudev                            # [linux]
     - jack                               # [linux]

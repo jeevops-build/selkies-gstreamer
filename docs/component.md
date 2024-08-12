@@ -184,8 +184,9 @@ After extracting the `.tar.gz` tarball, move the `.so` library files to the libr
 The following paths are required to exist for the Joystick Interposer to pass the joystick/gamepad input to various applications:
 
 ```bash
-sudo mkdir -pm755 /dev/input
+sudo mkdir -pm1777 /dev/input
 sudo touch /dev/input/js0 /dev/input/js1 /dev/input/js2 /dev/input/js3
+sudo chmod 777 /dev/input/js*
 ```
 
 The following environment variables are required to be set in the environment each application is being run in to receive the joystick/gamepad input.
@@ -256,7 +257,7 @@ If the TURN relay port range is wide, it may take a very long time for the conta
 
 Modify the relay ports `-p 65500-65535:65500-65535` and `-p 65500-65535:65500-65535/udp` combined with `-e TURN_MIN_PORT=65500 -e TURN_MAX_PORT=65535` as appropriate (at least two relay ports are required per connection).
 
-In addition, use the option `-e TURN_EXTRA_ARGS="--no-udp-relay"` if you cannot open the UDP `min-port=` to `max-port=` port ranges, or `-e TURN_EXTRA_ARGS="--no-tcp-relay"` if you cannot open the TCP `min-port=` to `max-port=` port ranges.
+In addition, use the option `-e TURN_EXTRA_ARGS="--no-udp-relay"` if you cannot open the UDP `min-port=` to `max-port=` port ranges, or `-e TURN_EXTRA_ARGS="--no-tcp-relay"` if you cannot open the TCP `min-port=` to `max-port=` port ranges. Note that the `--no-udp-relay` argument may not be supported with web browsers and may lead to the TURN server not working.
 
 Consult the [WebRTC and Firewall Issues: TURN Server Authentication Methods](firewall.md#turn-server-authentication-methods) and [TURN-REST](#turn-rest) sections for the difference between static auth secret/TURN REST API authentication and traditional long-term credential authentication.
 
@@ -280,7 +281,7 @@ This URI is ideally behind a local area network (LAN) inaccessible from the outs
 
 Because the time-limited TURN credentials automatically expire after some time, they are not useful even if they are leaked outside, as long as the pathway to the air-gapped or authenticated TURN-REST Container REST HTTP endpoint is not exposed plainly to the internet. [app.py](/addons/turn-rest/app.py) may also be hosted standalone without a container using the same startup command in the [Dockerfile](/addons/turn-rest/Dockerfile).
 
-The TURN-REST Container (or similarly, Kubernetes Pod) should be triggered with the Docker®/Podman options `-e TURN_SHARED_SECRET=`, `-e TURN_HOST=`, `-e TURN_PORT=`, `-e TURN_PROTOCOL=`, `-e TURN_TLS=`, where the options are dependent on the TURN server configuration of [coTURN](#coturn) or other TURN server implementations.
+The TURN-REST Container (or similarly, Kubernetes Pod) should be triggered with the Docker®/Podman options `-e TURN_SHARED_SECRET=`, `-e TURN_HOST=`, `-e TURN_PORT=`, `-e TURN_PROTOCOL=`, `-e TURN_TLS=`, `-e STUN_HOST=`, `-e STUN_PORT=`, where the options are dependent on the TURN server configuration of [coTURN](#coturn) or other TURN server implementations.
 
 Run the Docker®/Podman container built from the [`TURN-REST Dockerfile`](/addons/turn-rest/Dockerfile) (replace `main` to `latest` for the latest stable release**):
 

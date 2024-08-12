@@ -97,9 +97,9 @@ class GSTWebRTCApp:
         # Enforce minimum keyframe interval to 60 frames
         self.min_keyframe_frame_distance = 60
         self.keyframe_frame_distance = -1 if self.keyframe_distance == -1.0 else max(self.min_keyframe_frame_distance, int(self.framerate * self.keyframe_distance))
-        # Set VBV/HRD buffer multiplier to frame time, set 1.5x when optimal to prevent quality degradation in software encoders, relax 2x when keyframe/GOP is periodic
-        self.vbv_multiplier_nv = 1 if self.keyframe_distance == -1.0 else 2
-        self.vbv_multiplier_va = 1 if self.keyframe_distance == -1.0 else 2
+        # Set VBV/HRD buffer multiplier to frame time, set 1.5x when optimal (no keyframes/GOP) to prevent quality degradation in encoders, relax 2x when keyframe/GOP is periodic
+        self.vbv_multiplier_nv = 1.5 if self.keyframe_distance == -1.0 else 3
+        self.vbv_multiplier_va = 1.5 if self.keyframe_distance == -1.0 else 3
         self.vbv_multiplier_vp = 1.5 if self.keyframe_distance == -1.0 else 3
         self.vbv_multiplier_sw = 1.5 if self.keyframe_distance == -1.0 else 3
         # Packet loss base percentage
@@ -177,7 +177,7 @@ class GSTWebRTCApp:
                                candidate: self.__send_ice(webrtcbin, mlineindex, candidate))
 
         # Add STUN server
-        # TODO: figure out how to add more than 1 stun server.
+        # TODO: figure out how to add more than one STUN server.
         if self.stun_servers:
             logger.info("updating STUN server")
             self.webrtcbin.set_property("stun-server", self.stun_servers[0])
@@ -271,7 +271,7 @@ class GSTWebRTCApp:
                 cudaconvert.set_property("cuda-device-id", self.gpu_id)
 
             # Instructs cudaconvert to handle Quality of Service (QOS) events
-            # from the rest of the pipeline. Setting this to true increases
+            # from the rest of the pipeline. Setting this value increases
             # encoder stability.
             cudaconvert.set_property("qos", True)
 
@@ -1019,8 +1019,8 @@ class GSTWebRTCApp:
         pulsesrc.set_property("do-timestamp", False)
 
         # Maximum and minimum amount of data to read in each iteration in microseconds
-        pulsesrc.set_property("buffer-time", 20000)
-        pulsesrc.set_property("latency-time", 500)
+        pulsesrc.set_property("buffer-time", 100000)
+        pulsesrc.set_property("latency-time", 1000)
 
         # Create capabilities for pulsesrc and set channels
         pulsesrc_caps = Gst.caps_from_string("audio/x-raw")

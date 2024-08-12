@@ -3,6 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 # Supported base images: Ubuntu 24.04, 22.04, 20.04
+ARG DISTRIB_IMAGE=ubuntu
 ARG DISTRIB_RELEASE=24.04
 ARG GSTREAMER_BASE_IMAGE=ghcr.io/selkies-project/selkies-gstreamer/gstreamer
 ARG GSTREAMER_BASE_IMAGE_RELEASE=main
@@ -14,7 +15,8 @@ FROM ${GSTREAMER_BASE_IMAGE}:${GSTREAMER_BASE_IMAGE_RELEASE}-ubuntu${DISTRIB_REL
 FROM ${PY_BUILD_IMAGE} AS selkies-build
 FROM ${WEB_IMAGE} AS selkies-web
 FROM ${JS_BASE_IMAGE}:${JS_BASE_IMAGE_RELEASE}-ubuntu${DISTRIB_RELEASE} AS selkies-js-interposer
-FROM ubuntu:${DISTRIB_RELEASE}
+FROM ${DISTRIB_IMAGE}:${DISTRIB_RELEASE}
+ARG DISTRIB_IMAGE
 ARG DISTRIB_RELEASE
 
 LABEL maintainer="https://github.com/danisla,https://github.com/ehfd"
@@ -36,7 +38,7 @@ RUN apt-get clean && apt-get update && apt-get dist-upgrade -y && apt-get instal
         tzdata && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/debconf/* /var/log/* /tmp/* /var/tmp/* && \
     locale-gen en_US.UTF-8 && \
-    ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && echo "$TZ" > /etc/timezone && \
+    ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime && echo "${TZ}" > /etc/timezone && \
     # Only use sudo-root for root-owned directory (/dev, /proc, /sys) or user/group permission operations, not for apt-get installation or file/directory operations
     mv -f /usr/bin/sudo /usr/bin/sudo-root && \
     ln -snf /usr/bin/fakeroot /usr/bin/sudo && \
@@ -182,7 +184,7 @@ WORKDIR /opt
 RUN mkdir -pm755 /etc/apt/preferences.d && echo "Package: firefox*\n\
 Pin: version 1:1snap*\n\
 Pin-Priority: -1" > /etc/apt/preferences.d/firefox-nosnap && \
-    mkdir -pm755 /etc/apt/trusted.gpg.d && curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x0AB215679C571D1C8325275B9BDB3D89CE49EC21" | gpg --dearmor -o /etc/apt/trusted.gpg.d/mozillateam-ubuntu-ppa.gpg && \
+    mkdir -pm755 /etc/apt/trusted.gpg.d && curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x738BEB9321D1AAEC13EA9391AEBDF4819BE21867" | gpg --dearmor -o /etc/apt/trusted.gpg.d/mozillateam-ubuntu-ppa.gpg && \
     mkdir -pm755 /etc/apt/sources.list.d && echo "deb https://ppa.launchpadcontent.net/mozillateam/ppa/ubuntu $(grep UBUNTU_CODENAME= /etc/os-release | cut -d= -f2 | tr -d '\"') main" > "/etc/apt/sources.list.d/mozillateam-ubuntu-ppa-$(grep UBUNTU_CODENAME= /etc/os-release | cut -d= -f2 | tr -d '\"').list" && \
     mkdir -pm755 /etc/apt/trusted.gpg.d && curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xFC43B7352BCC0EC8AF2EEB8B25088A0359807596" | gpg --dearmor -o /etc/apt/trusted.gpg.d/pipewire-debian-ubuntu-pipewire-upstream.gpg && \
     mkdir -pm755 /etc/apt/sources.list.d && echo "deb https://ppa.launchpadcontent.net/pipewire-debian/pipewire-upstream/ubuntu $(grep UBUNTU_CODENAME= /etc/os-release | cut -d= -f2 | tr -d '\"') main" > "/etc/apt/sources.list.d/pipewire-debian-ubuntu-pipewire-upstream-$(grep UBUNTU_CODENAME= /etc/os-release | cut -d= -f2 | tr -d '\"').list" && \
@@ -283,7 +285,9 @@ turnserver \
     --user=\"selkies:\${TURN_RANDOM_PASSWORD:-\$(tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c 24)}\" \
     --no-cli \
     --cli-password=\"\${TURN_RANDOM_PASSWORD:-\$(tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c 24)}\" \
-    --db=\"\${XDG_RUNTIME_DIR:-/tmp}/coturn-turndb\" \
+    --userdb=\"\${XDG_RUNTIME_DIR:-/tmp}/turnserver-turndb\" \
+    --log-file=\"stdout\" \
+    --pidfile=\"\${XDG_RUNTIME_DIR:-/tmp}/turnserver.pid\" \
     --allow-loopback-peers \
     \${TURN_EXTRA_ARGS} \$@\
 " > /etc/start-turnserver.sh && chmod -f 755 /etc/start-turnserver.sh

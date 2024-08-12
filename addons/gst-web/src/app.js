@@ -96,7 +96,7 @@ var app = new Vue({
                 { text: '200 fps', value: 200 },
                 { text: '240 fps', value: 240 },
             ],
-            audioBitRate: 96000,
+            audioBitRate: 128000,
             audioBitRateOptions: [
                 { text: '24 kb/s', value: 24000 },
                 { text: '32 kb/s', value: 32000 },
@@ -822,7 +822,7 @@ var checkPublishing = () => {
 // checkPublishing();
 
 // Fetch RTC configuration containing STUN/TURN servers.
-fetch("/turn/")
+fetch("/turn")
     .then(function (response) {
         return response.json();
     })
