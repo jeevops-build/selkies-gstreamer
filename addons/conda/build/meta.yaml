@@ -70,9 +70,7 @@ requirements:
   host:
     - python {{ python }}
     - pip
-    - abseil-cpp
     - libdrm
-    - libiconv
     - openssl
     - libzlib
     - glib
@@ -98,8 +96,8 @@ requirements:
     - pthread-stubs                      # [linux]
     - pulseaudio-client                  # [linux]
     - alsa-lib                           # [linux]
-    - mesalib                            # [linux]
     - libxcb                             # [linux]
+    - xorg-libxcvt                       # [linux]
     - xorg-libxdamage                    # [linux]
     - xorg-libxfixes                     # [linux]
     - xorg-libxext                       # [linux]
@@ -127,8 +125,10 @@ requirements:
     - {{ pin_compatible('glib') }}
     - pulseaudio                         # [linux]
     - pulseaudio-client                  # [linux]
+    - libva                              # [linux]
     - libva-utils                        # [linux]
     - libxcb                             # [linux]
+    - xorg-libxcvt                       # [linux]
     - xorg-libxdamage                    # [linux]
     - xorg-libxfixes                     # [linux]
     - xorg-libxext                       # [linux]
@@ -140,8 +140,9 @@ requirements:
     - wayland-protocols                  # [linux]
     - wayland                            # [linux]
     - bash                               # [linux]
-    - wmctrl-cli                        # [linux]
-    - xdotool                           # [linux]
-    - xsel                              # [linux]
+    - wmctrl-cli                         # [linux]
+    - xdotool                            # [linux]
+    - xsel                               # [linux]
+    # NVIDIA NVRTC/nvJPEG dependency, https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvrtc/LICENSE.txt
     - cuda-nvrtc 11.3.*
     - libnvjpeg 11.4.*

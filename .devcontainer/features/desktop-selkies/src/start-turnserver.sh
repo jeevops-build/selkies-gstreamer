@@ -15,7 +15,7 @@ exec turnserver \
     --user="selkies:selkies" \
     --allow-loopback-peers \
     --userdb="/tmp/turnserver-turndb" \
-    --log-file="stdout" \
     --pidfile="/tmp/turnserver.pid" \
+    --log-file="stdout" \
     --prometheus \
     ${TURN_EXTRA_ARGS} $@
