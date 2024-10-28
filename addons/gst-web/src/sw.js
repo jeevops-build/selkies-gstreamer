@@ -38,13 +38,21 @@ self.addEventListener('activate', evt => {
   evt.waitUntil(deleteCache());
 });
 
-/* Start the service worker and cache all of the app's content */
-self.addEventListener('install', function(e) {
+const CRITICAL_ASSETS = [
+  'index.html',
+  'app.js',
+  'webrtc.js',
+  'input.js'
+];
+
+self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(getCacheName()).then(function(cache) {
-      return cache.addAll(filesToCache);
+    caches.open(getCacheName()).then((cache) => {
+      return cache.addAll(CRITICAL_ASSETS);
     })
   );
+  // Skip waiting to activate immediately
+  self.skipWaiting();
 });
 
 /* Serve cached content when offline */

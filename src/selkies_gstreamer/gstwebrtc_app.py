@@ -167,6 +167,15 @@ class GSTWebRTCApp:
         # Set default jitterbuffer latency to the minimum possible
         self.webrtcbin.set_property("latency", 0)
 
+        # Optimize buffer handling
+        if not audio_only:
+            self.ximagesrc.set_property("blocksize", 32768)
+            self.ximagesrc.set_property("do-timestamp", True)
+            self.ximagesrc.set_property("synchronous", False)
+
+        # Fast ICE negotiation
+        self.webrtcbin.set_property("ice-tcp", False)
+
         # Connect signal handlers
         if self.congestion_control and not audio_only:
             self.webrtcbin.connect(
@@ -997,6 +1006,12 @@ class GSTWebRTCApp:
         transceiver.set_property("do-nack", True)
         transceiver.set_property("fec-type", GstWebRTC.WebRTCFECType.ULP_RED if self.video_packetloss_percent > 0 else GstWebRTC.WebRTCFECType.NONE)
         transceiver.set_property("fec-percentage", self.video_packetloss_percent)
+        # Optimize encoder settings for faster startup
+        if self.encoder.startswith("nv"):
+            nvh264enc = Gst.Bin.get_by_name(self.pipeline, "nvenc")
+            nvh264enc.set_property("preset", "p1")  # Fastest preset
+            nvh264enc.set_property("rc-lookahead", 0)
+            nvh264enc.set_property("zerolatency", True)
     # [END build_video_pipeline]
 
     # [START build_audio_pipeline]
@@ -1019,7 +1034,7 @@ class GSTWebRTCApp:
         pulsesrc.set_property("do-timestamp", False)
 
         # Maximum and minimum amount of data to read in each iteration in microseconds
-        pulsesrc.set_property("buffer-time", 100000)
+        pulsesrc.set_property("buffer-time", 50000)
         pulsesrc.set_property("latency-time", 1000)
 
         # Create capabilities for pulsesrc and set channels

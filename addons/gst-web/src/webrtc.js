@@ -79,11 +79,14 @@ class WebRTCDemo {
                 {
                     "urls": [
                         "stun:stun.l.google.com:19302"
-                    ]
+                    ],
+                    "iceCandidatePoolSize": 5
                 },
             ],
             "blockStatus": "NOT_BLOCKED",
-            "iceTransportPolicy": "all"
+            "iceTransportPolicy": "all",
+            "bundlePolicy": "max-bundle",
+            "rtcpMuxPolicy": "require"
         };
 
         /**
